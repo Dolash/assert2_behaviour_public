@@ -1,0 +1,188 @@
+<?xml version="1.0"?>
+<launch>
+
+<arg name="scan_topic1" default = "/stage/r0/ranger_1/laserscan"/>
+<arg name="pose_topic1" default = "/stage/r0/pose_ground_truth"/>
+<arg name="subject_pose_topic1" default = "/stage/r1/pose_ground_truth"/>
+<arg name="cmd_vel_topic1" default = "/stage/r0/cmd_vel"/>
+<arg name="multiplier_topic1" default = "/r0/multiplier"/>
+
+<arg name="start_x1" default = "1"/>
+<arg name="start_y1" default = "-2"/>
+<arg name="start_yaw1" default = "-1.571"/>
+<arg name="end_x1" default = "1"/> 
+<arg name="end_y1" default = "2"/>
+<arg name="end_yaw1" default = "1.538"/>
+
+<arg name="start_door_x1" default = "1"/> 
+<arg name="start_door_y1" default = "-1"/> 
+<arg name="start_door_yaw1" default = "1.571"/>
+<arg name="end_door_x1" default = "1"/>  
+<arg name="end_door_y1" default = "1"/> 
+<arg name="end_door_yaw1" default = "-1.571"/>
+
+
+<param name ="/use_sim_time" value="true"/>
+
+
+<arg name="scan_topic2" default = "/stage/r1/ranger_1/laserscan"/>
+<arg name="pose_topic2" default = "/stage/r1/pose_ground_truth"/>
+<arg name="subject_pose_topic2" default = "/stage/r0/pose_ground_truth"/>
+<arg name="cmd_vel_topic2" default = "/stage/r1/cmd_vel"/>
+<arg name="multiplier_topic2" default = "/r1/multiplier"/>
+
+
+<arg name="start_x2" default = "1"/>
+<arg name="start_y2" default = "2"/>
+<arg name="start_yaw2" default = "-1.571"/>
+<arg name="end_x2" default = "1"/> 
+<arg name="end_y2" default = "-2"/>
+<arg name="end_yaw2" default = "1.538"/>
+
+<arg name="start_door_x2" default = "1"/> 
+<arg name="start_door_y2" default = "1"/> 
+<arg name="start_door_yaw2" default = "1.571"/>
+<arg name="end_door_x2" default = "1"/>  
+<arg name="end_door_y2" default = "-1"/> 
+<arg name="end_door_yaw2" default = "-1.571"/>
+
+
+<!--<arg name="tolerance" default = "8"/>
+<arg name="aggression" default = "2"/>
+<arg name="lose_distance" default = "-0.9"/>
+<arg name="win_distance" default = "-0.3"/> -->
+
+<!--<arg name="tolerance" default = "8"/>
+<arg name="aggression" default = "2"/>
+<arg name="lose_distance" default = "-0.9"/>
+<arg name="win_distance" default = "-0.3"/>
+
+<arg name="use_stopper" default = "true"/>-->
+
+<arg name="door_x" default = "1"/>  
+<arg name="door_y" default = "0"/>
+
+<arg name="world" default = "simple.world"/>
+
+
+<node name="stage_ros" pkg="stage_ros" type="stageros" output="screen" respawn="true" args="/home/autolab/assert2_ws/src/stage_ros/world/simple.world">
+	
+  </node>
+
+<node name="emergency_stopper_r0" pkg="emergency_stopper" type="emergency_stopper" output="screen">
+	<param name="scan_topic" value="/stage/r0/ranger_1/laserscan"/>
+	<param name="loser_topic" value="/loser"/>
+		<param name="multiplier_topic" value="/r0/multiplier"/>
+	<remap from="/winner" to="/r0/winner" />
+	<remap from="/emergency_stop" to="/r0/emergency_stop" />
+	<remap from="/cmd_vel" to="/stage/r0/cmd_vel" />
+	<remap from="/listener/cmd_vel" to="/r0/listener/cmd_vel" />
+
+</node>
+<!--
+<node name="emergency_stopper_r1" pkg="emergency_stopper" type="emergency_stopper" output="screen">
+	<param name="scan_topic" value="/stage/r1/ranger_1/laserscan"/>
+	<param name="loser_topic" value="/loser"/>
+	<param name="multiplier_topic" value="/r1/multiplier"/>
+	<remap from="/winner" to="/r1/winner" />
+	<remap from="/emergency_stop" to="/r1/emergency_stop" />
+	<remap from="/cmd_vel" to="/stage/r1/cmd_vel" />
+		<remap from="/listener/cmd_vel" to="/r1/listener/cmd_vel" />
+</node>
+-->
+<node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_map_to_odom_r0" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0 /stage/r0/odom /map 100">
+
+	</node>
+<!--
+<node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_map_to_odom_r1" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0 /map /stage/r1/odom 100">
+	</node>
+-->
+
+  <node pkg="move_base" type="move_base" respawn="true" name="move_base_r0" output="screen">
+	
+    <rosparam file="$(find rosnav)/costmap_common_params_r0.yaml" command="load" ns="global_costmap" />
+    <rosparam file="$(find rosnav)/costmap_common_params_r0.yaml" command="load" ns="local_costmap" />
+    <rosparam file="$(find rosnav)/local_costmap_params_r0.yaml" command="load" />
+    <rosparam file="$(find rosnav)/global_costmap_params_r0.yaml" command="load" />
+    <rosparam file="$(find rosnav)/base_local_planner_params.yaml" command="load" />
+	<param name="controller_frequency" value="10"/>
+	<param name="clearing_rotation_allowed" value="false"/>
+
+	<param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS"/>
+	<remap from="/cmd_vel" to="/r0/listener/cmd_vel" />
+	<remap from="/move_base/goal" to="/r0/move_base/goal" />
+	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
+<remap from="/odom" to="/stage/r0/odom" />
+
+  </node>
+<!--
+<node pkg="move_base" type="move_base" respawn="true" name="move_base_r1" output="screen">
+	
+    <rosparam file="$(find rosnav)/costmap_common_params_r1.yaml" command="load" ns="global_costmap" />
+    <rosparam file="$(find rosnav)/costmap_common_params_r1.yaml" command="load" ns="local_costmap" />
+    <rosparam file="$(find rosnav)/local_costmap_params_r1.yaml" command="load" />
+    <rosparam file="$(find rosnav)/global_costmap_params_r1.yaml" command="load" />
+    <rosparam file="$(find rosnav)/base_local_planner_params.yaml" command="load" />
+	<param name="controller_frequency" value="10"/>
+	<param name="clearing_rotation_allowed" value="false"/>
+
+	<param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS"/>
+	<remap from="/cmd_vel" to="/r1/listener/cmd_vel" />
+	<remap from="/move_base/goal" to="/r1/move_base/goal" />
+	<remap from="/move_base_simple/goal" to="/r1/move_base_simple/goal" />
+
+  </node>
+-->
+
+  
+  <node name="assert2_behaviour_r0" pkg="assert2_behaviour" type="assert2_behaviour" output="screen">
+  
+	<param name="stage_mode" value="true"/>
+	<param name="scan_topic" value="$(arg scan_topic1)"/>
+	<param name="pose_topic" value="$(arg pose_topic1)"/>
+	<param name="subject_pose_topic" value="$(arg subject_pose_topic1)"/>
+	<param name="cmd_vel_topic" value="$(arg cmd_vel_topic1)"/>
+	<param name="multiplier_topic" value="$(arg multiplier_topic1)"/>
+	<param name="start_x" value="$(arg start_x1)"/>
+	<param name="start_y" value="$(arg start_y1)"/>
+	<param name="start_yaw" value="$(arg start_yaw1)"/>
+	<param name="end_x" value="$(arg end_x1)"/>
+	<param name="end_y" value="$(arg end_y1)"/>
+	<param name="end_yaw" value="$(arg end_yaw1)"/>
+	<param name="start_door_x" value="$(arg start_door_x1)"/>
+	<param name="start_door_y" value="$(arg start_door_y1)"/>
+	<param name="start_door_yaw" value="$(arg start_door_yaw1)"/>
+	<param name="end_door_x" value="$(arg end_door_x1)"/>
+	<param name="end_door_y" value="$(arg end_door_y1)"/>
+	<param name="end_door_yaw" value="$(arg end_door_yaw1)"/>
+	<param name="door_x" value="$(arg door_x)"/>
+	<param name="door_y" value="$(arg door_y)"/>
+	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
+  </node>
+  
+  <!--  <node name="assert2_behaviour_r1" pkg="assert2_behaviour" type="assert2_behaviour" output="screen">
+  
+	<param name="stage_mode" value="true"/>
+	<param name="scan_topic" value="$(arg scan_topic2)"/>
+	<param name="pose_topic" value="$(arg pose_topic2)"/>
+<param name="subject_pose_topic" value="$(arg subject_pose_topic1)"/>
+	<param name="cmd_vel_topic" value="$(arg cmd_vel_topic2)"/>
+	<param name="multiplier_topic" value="$(arg multiplier_topic2)"/>
+
+	<param name="start_x" value="$(arg start_x2)"/>
+	<param name="start_y" value="$(arg start_y2)"/>
+	<param name="start_yaw" value="$(arg start_yaw2)"/>
+	<param name="end_x" value="$(arg end_x2)"/>
+	<param name="end_y" value="$(arg end_y2)"/>
+	<param name="end_yaw" value="$(arg end_yaw2)"/>
+	<param name="start_door_x" value="$(arg start_door_x2)"/>
+	<param name="start_door_y" value="$(arg start_door_y2)"/>
+	<param name="start_door_yaw" value="$(arg start_door_yaw2)"/>
+	<param name="end_door_x" value="$(arg end_door_x2)"/>
+	<param name="end_door_y" value="$(arg end_door_y2)"/>
+	<param name="end_door_yaw" value="$(arg end_door_yaw2)"/>
+	<param name="door_x" value="$(arg door_x)"/>
+	<param name="door_y" value="$(arg door_y)"/>
+  </node>
+-->
+</launch>
