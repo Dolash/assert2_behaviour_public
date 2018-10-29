@@ -22,7 +22,7 @@
 <arg name="end_door_yaw1" default = "-1.571"/>
 
 
-<param name ="/use_sim_time" value="true"/>
+
 
 
 <arg name="scan_topic2" default = "/stage/r1/ranger_1/laserscan"/>
@@ -47,22 +47,12 @@
 <arg name="end_door_yaw2" default = "-1.571"/>
 
 
-<!--<arg name="tolerance" default = "8"/>
-<arg name="aggression" default = "2"/>
-<arg name="lose_distance" default = "-0.9"/>
-<arg name="win_distance" default = "-0.3"/> -->
-
-<!--<arg name="tolerance" default = "8"/>
-<arg name="aggression" default = "2"/>
-<arg name="lose_distance" default = "-0.9"/>
-<arg name="win_distance" default = "-0.3"/>
-
-<arg name="use_stopper" default = "true"/>-->
-
 <arg name="door_x" default = "1"/>  
 <arg name="door_y" default = "0"/>
 
 <arg name="world" default = "simple.world"/>
+<param name ="/use_sim_time" value="true"/>
+
 
 
 <node name="stage_ros" pkg="stage_ros" type="stageros" output="screen" respawn="true" args="/home/autolab/assert2_ws/src/stage_ros/world/simple.world">

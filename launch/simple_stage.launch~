@@ -112,6 +112,7 @@
 	<remap from="/cmd_vel" to="/r0/listener/cmd_vel" />
 	<remap from="/move_base/goal" to="/r0/move_base/goal" />
 	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
+<remap from="/odom" to="/stage/r0/odom" />
 
   </node>
 <!--
@@ -156,6 +157,7 @@
 	<param name="end_door_yaw" value="$(arg end_door_yaw1)"/>
 	<param name="door_x" value="$(arg door_x)"/>
 	<param name="door_y" value="$(arg door_y)"/>
+	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
   </node>
   
   <!--  <node name="assert2_behaviour_r1" pkg="assert2_behaviour" type="assert2_behaviour" output="screen">
