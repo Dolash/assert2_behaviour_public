@@ -50,6 +50,11 @@ private:
 	bool doorReached;
 	
 	bool subjectDetected;
+	bool clearedA;
+	bool clearedB;
+
+	float parkX;
+	float parkY;
 	
 	bool fighting;
     bool navigating;
@@ -59,6 +64,8 @@ private:
 	std::string cmdVelTopic;
 	std::string scanTopic;
 	std::string multiplierTopic;
+
+	std::string mapFrame;
 	
 	float startX;
     float startY;
@@ -83,8 +90,17 @@ private:
 
 	float currentGoalX;
     	float currentGoalY;
+	geometry_msgs::Quaternion currentGoalOrientation;
 	
+	float doorEngageDistance;
+	float subjectDoorEngageDistance;
+	float winnerMultiple;
+
 		bool clockReceived;
+		bool oneRun;
+
+	float currentVelocity;
+	float currentSubjectVelocity;
 		
 			std_msgs::Bool emergencyPause;
 			std_msgs::Float32 multiplier;

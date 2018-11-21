@@ -2,8 +2,8 @@
 #include "assert2_behaviour/assert2_behaviour.h"
 
 Assert2Behaviour::Assert2Behaviour(ros::NodeHandle& nh) 
-    : nh(nh),
-    privNh("~") {
+	: nh(nh),
+	privNh("~") {
 		privNh.param<double>("loop_hz", loopHz, 10);
 		privNh.param<bool>("stage_mode", stageMode, true);
 		
@@ -11,8 +11,8 @@ Assert2Behaviour::Assert2Behaviour(ros::NodeHandle& nh)
 		privNh.param<std::string>("subject_pose_topic", subjectPoseTopic, "/robot2/pose");
 		privNh.param<std::string>("cmd_vel_topic", cmdVelTopic, "/cmd_vel");
 		privNh.param<std::string>("scan_topic", scanTopic, "/scan");
-		
-		
+		privNh.param<std::string>("multiplier_topic", multiplierTopic, "/multiplier");
+	
 		privNh.param<float>("start_x", startX, 1);
 		privNh.param<float>("start_y", startY, 1);
 		privNh.param<float>("end_x", goalX, 1);
@@ -27,30 +27,47 @@ Assert2Behaviour::Assert2Behaviour(ros::NodeHandle& nh)
 		privNh.param<float>("end_door_yaw", goalDoorYaw, 0);
 		privNh.param<float>("door_x", doorX, 1);
 		privNh.param<float>("door_y", doorY, 0);
+
+		privNh.param<float>("door_engage_distance", doorEngageDistance, 1.5);
+		privNh.param<float>("subject_door_engage_distance", subjectDoorEngageDistance, 1.5);
+		privNh.param<float>("winner_multiple", winnerMultiple, 2.0);
+		privNh.param<bool>("one_run", oneRun, false);
+		privNh.param<std::string>("map_frame", mapFrame, "map");
 		firstTime = false;
 		poseReceived = false;
 		subjectPoseReceived = false;
 
-	/*state variables for which of the four movement goals to be targeting*/
-	firstGoal = false;
-        returnTrip = false;
-	doorReached = true;
+		/*state variables for which of the four movement goals to be targeting*/
+		firstGoal = false;
+		returnTrip = false;
+		doorReached = true;
 
-goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 1);
+		clearedA = false;
+		clearedB = false;
+
+		parkX = 0.0;
+		parkY = 0.0;
+
+		subjectDetected = false;
+		clockReceived = false;
+		emergencyPause.data = false;
+		fighting = false;
+        	navigating = true;
+		laserReceived = false;
 		
 		currentGoalX = goalDoorX;
 		currentGoalY = goalDoorY;
-		subjectDetected = false;
-		clockReceived = false;
-			emergencyPause.data = false;
-		fighting = false;
-        navigating = true;
-laserReceived = false;
-	multiplier.data = 1.0;
+		currentGoalOrientation = tf::createQuaternionMsgFromYaw(goalDoorYaw);
+		
+		multiplier.data = 1.0;
+		currentVelocity = 1.0;
+		currentSubjectVelocity = 1.0;
 		
 		//Set in both Stage and Vicon settings for a 5-second ROS wait before things begin
 		timer = ros::Time::now();
-		
+		//Just here as an example
+		//timer = clockTime.clock;
+
 		if (stageMode == false)
 		{
 			poseSub = nh.subscribe("/global_poses", 1, &Assert2Behaviour::viconCallback, this);
@@ -65,10 +82,10 @@ laserReceived = false;
 			
 			
 		}
-		//Just here as an example
-		//timer = clockTime.clock;
+		
 		emergencyStopSub = nh.subscribe("/emergency_stop", 1, &Assert2Behaviour::emergencyStopCallback, this);
 		laserSub = nh.subscribe(scanTopic, 1, &Assert2Behaviour::laserCallback, this);
+		goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 1);
 		cmd_vel_pub = nh.advertise<geometry_msgs::Twist>(cmdVelTopic, 30);
 		multiplier_pub = nh.advertise<std_msgs::Float32>(multiplierTopic, 30);
 }
@@ -78,45 +95,41 @@ Assert2Behaviour::~Assert2Behaviour() {
 }
 
 void Assert2Behaviour::stagePoseCallback(const nav_msgs::Odometry::ConstPtr& pose) {
-    stagePose = *pose;
-	//ROS_INFO("[ASSERTIVE_BEHAVIOUR] stage pose.");
-    poseReceived = true;
+	stagePose = *pose;
+	poseReceived = true;
 }
 
 void Assert2Behaviour::stageSubjectPoseCallback(const nav_msgs::Odometry::ConstPtr& pose) {
-    stageSubjectPose = *pose;
-	//ROS_INFO("[ASSERTIVE_BEHAVIOUR] stage pose.");
-    subjectPoseReceived = true;
+	stageSubjectPose = *pose;
+	subjectPoseReceived = true;
 }
 
 void Assert2Behaviour::viconSubjectCallback(const geometry_msgs::TransformStamped::ConstPtr& pose) {
-
-    latestSubjectPoses = *pose;
+	latestSubjectPoses = *pose;
 	subjectPoseReceived = true;
 }
 void Assert2Behaviour::viconCallback(const geometry_msgs::TransformStamped::ConstPtr& pose) {
-    latestPoses = *pose;
-    poseReceived = true;
+	latestPoses = *pose;
+	poseReceived = true;
 }
 
 void Assert2Behaviour::laserCallback(const sensor_msgs::LaserScan scanData) {
-	//ROS_INFO("[ASSERTIVE_BEHAVIOUR] laser scan.");
-    latestLaserScan = scanData.ranges;
-    laserReceived = true;
+	latestLaserScan = scanData.ranges;
+	laserReceived = true;
 }
 
 void Assert2Behaviour::clockCallback(const rosgraph_msgs::Clock clockData)
 {
 	clockTime = clockData;
-	//ROS_INFO("[ASSERTIVE_BEHAVIOUR] Clock.");
 	clockReceived = true;
 }
 
 void Assert2Behaviour::emergencyStopCallback(const std_msgs::Bool emergencyPauseData)
 {
 	emergencyPause = emergencyPauseData;
-	
 }
+
+
 
 
 /*For calculating the angle we want to be turned in order to be facing our target, given your pose and the goal location's pose*/
@@ -129,23 +142,19 @@ float Assert2Behaviour::getDesiredAngle(float targetX, float targetY, float curr
 	float nTargetX = (targetX - currentXCoordinateIn);
 	float nTargetY = (targetY - currentYCoordinateIn);
 
-
 	/*So this calculates, if our robot was at the origin and our target is at the appropriate relative position, what angle should we be turned to face them?*/
 	float angbc = atan2((nTargetY), (nTargetX));
 	result = angbc;
 	result = (result - 1.57595);
 	/*A quick fix in the event that this desired angle adjustment takes us "off the edge" of pi*/
 	if (result < -3.1415)
-    {
-		//result = (3.1518 - (fabs(result) - 3.1518));
+	{
 		result += 6.2831;
 	}
 	else if (result > 3.1415)
 	{
-	    result -= 6.2831;
+		result -= 6.2831;
 	}
-
-	
 	return result;
 }
 
@@ -158,8 +167,6 @@ void Assert2Behaviour::subjectAhead()
 	float subjectCurrentY;
 	float yaw;
 	float angleToSubject;
-
-
 
 	if (stageMode == true)
 	{
@@ -179,54 +186,107 @@ void Assert2Behaviour::subjectAhead()
 	}
 	angleToSubject = getDesiredAngle(subjectCurrentX, subjectCurrentY, currentX, currentY);
     
+
+//I don't remember what this chunk does but I won't delete it just in case
     /*Take your pose and orientation compare to the pose of every other tracked subject and if one is detected then set that detection to true*/
     /*if (fabs(currentX - subjectCurrentX) < 1.0 
 		&& fabs(currentY - subjectCurrentY) < 1.0 
 		&& ((yaw > (angleToSubject - 0.25)) && (yaw < (angleToSubject + 0.25)) || (((yaw > 2.9) && (angleToSubject < -2.9)) 
 		|| ((yaw < -2.9) && (angleToSubject > 2.9)))))*/
 
-if(
-sqrt(((doorX - currentX)*(doorX - currentX)) + ((doorY - currentY)*(doorY - currentY))) < 1.5
+
+
+/*The below is saying: If you're within 1.5 of the door, and your subject is within 1.5 of the door, and your goal is currently closer to your subject than to you (meaning that it lies somewhere on the other side of the door), which are the conditions for conflict*/
+	if(
+	sqrt(((doorX - currentX)*(doorX - currentX)) + ((doorY - currentY)*(doorY - currentY))) < doorEngageDistance
 	&&	
-sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) < 1.5
+	sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) < subjectDoorEngageDistance
 	&&
-sqrt(((currentGoalX - subjectCurrentX)*(currentGoalX - subjectCurrentX)) + ((currentGoalY - subjectCurrentY)*(currentGoalY - subjectCurrentY))) < sqrt(((currentGoalX - currentX)*(currentGoalX - currentX)) + ((currentGoalY - currentY)*(currentGoalY - currentY)))
+	sqrt(((currentGoalX - subjectCurrentX)*(currentGoalX - subjectCurrentX)) + ((currentGoalY - subjectCurrentY)*(currentGoalY - subjectCurrentY))) < sqrt(((currentGoalX - currentX)*(currentGoalX - currentX)) + ((currentGoalY - currentY)*(currentGoalY - currentY)))
  	)
-    {
-        //ROS_INFO("[ASSERTIVE_BEHAVIOUR] SUBJECT AHEAD");
-        subjectDetected = true;
-    }
-    else 
-    {
-        subjectDetected = false;
-    }
+	{
+        
+		subjectDetected = true;
+	}
+	else 
+	{
+        	subjectDetected = false;
+	}
 
 
 
 	if (subjectDetected == true)
-		{
-			if (
-	sqrt(((doorX - currentX)*(doorX - currentX)) + ((doorY - currentY)*(doorY - currentY))) 
+	{
+
+			/*If you are closer to the door than your opponant, carry on, speed up*/
+		if (
+		(sqrt(((doorX - currentX)*(doorX - currentX)) + ((doorY - currentY)*(doorY - currentY))) / currentVelocity)
 		<	
-	sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY)))
+		(sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) / currentSubjectVelocity )
 		)
-			{
-				multiplier.data = 1.25;
-				multiplier_pub.publish(multiplier);
+		{
+			multiplier.data = winnerMultiple;
+			multiplier_pub.publish(multiplier);
 						
+		}
+			/*If you are further than your opponant, go into park*/
+		else
+		{
+			navigating = false;
+			fighting = true;
+				
+			
+			if (currentX < doorX)
+			{
+				parkX = doorX - 1.0f;
 			}
 			else
 			{
-				multiplier.data = 0.5;
-				multiplier_pub.publish(multiplier);
-			
+				parkX = doorX + 1.0f;
 			}
+			if (currentY < doorY)
+			{
+				parkY = doorY - 1.0f;
+			}
+			else
+			{
+				parkY = doorY + 1.0f;
+			}
+			std_msgs::Header tmpHead;
+			geometry_msgs::Pose tmpPose;
+			geometry_msgs::Point tmpPoint;
+			geometry_msgs::Quaternion tmpQuaternion;
+			tmpPoint.x = parkX;
+			tmpPoint.y = parkY;
+			tmpPoint.z = 0.0;
+
+			tf::Quaternion q_rot, q_orig, q_new;
+			double r=0, p=0, y=-1.572595;
+			q_rot = tf::createQuaternionFromRPY(r, p, y);
+			quaternionMsgToTF(currentGoalOrientation, q_orig);
+			q_new = q_rot*q_orig;
+			q_new.normalize();
+			quaternionTFToMsg(q_new, tmpQuaternion); 
+			tmpPose.position = tmpPoint;
+			tmpPose.orientation = currentGoalOrientation;
+			//tmpPose.orientation = tmpQuaternion;
+			goal_cmd.pose =	tmpPose;
+			tmpHead.frame_id = mapFrame;
+			goal_cmd.header = tmpHead;
+
+			goal_pub.publish(goal_cmd);
+			ROS_INFO("[ASSERTIVE_BEHAVIOUR] PARKING");
+			//multiplier.data = 0.5;
+			//multiplier_pub.publish(multiplier);
+		
 		}
-		else
-		{
-			multiplier.data = 1.0;
-			multiplier_pub.publish(multiplier);
-		}
+	}
+	else
+	{
+		
+		multiplier.data = 1.0;
+		multiplier_pub.publish(multiplier);
+	}
 
 
 
@@ -235,7 +295,77 @@ sqrt(((currentGoalX - subjectCurrentX)*(currentGoalX - subjectCurrentX)) + ((cur
 
 void Assert2Behaviour::fightingBehaviour()
 {
- 
+	float currentX;
+	float currentY;
+	float subjectCurrentX;
+	float subjectCurrentY;
+
+
+	if (stageMode == true)
+	{
+		currentX = stagePose.pose.pose.position.x;
+		currentY = stagePose.pose.pose.position.y;
+		subjectCurrentX = stageSubjectPose.pose.pose.position.x;
+		subjectCurrentY = stageSubjectPose.pose.pose.position.y;
+	}
+	else
+	{
+		currentX = latestPoses.transform.translation.x;
+		currentY = latestPoses.transform.translation.y;
+		subjectCurrentX = latestSubjectPoses.transform.translation.x;
+		subjectCurrentY = latestSubjectPoses.transform.translation.y;
+	}
+	/*If the subject is now far enough away from the door that, by the previous term used to start the fight, they must now be moving away from the conflict*/	
+	if (sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) > (subjectDoorEngageDistance + 0.1) && clearedA == false)
+	{
+		clearedA = true;
+	}
+ 	if (((fabs(currentX - parkX) < 0.4 && fabs(currentY - parkY) < 0.4) ) && clearedB == false ) //&& (fabs(yawPark) < 0.3)
+	{
+		std_msgs::Header tmpHead;
+		geometry_msgs::Pose tmpPose;
+		geometry_msgs::Point tmpPoint;
+		geometry_msgs::Quaternion tmpQuaternion;
+		tmpPoint.x = doorX;
+		tmpPoint.y = doorY;
+		tmpPoint.z = 0.0;
+		tmpQuaternion = currentGoalOrientation;
+		tmpPose.position = tmpPoint;
+		tmpPose.orientation = tmpQuaternion;
+		goal_cmd.pose =	tmpPose;
+		tmpHead.frame_id = mapFrame;
+		goal_cmd.header = tmpHead;
+
+		goal_pub.publish(goal_cmd);
+		ROS_INFO("[ASSERTIVE_BEHAVIOUR] TURNING");
+
+		clearedB = true;
+	}
+	else if (clearedA == true && clearedB == true)
+	{
+		std_msgs::Header tmpHead;
+		geometry_msgs::Pose tmpPose;
+		geometry_msgs::Point tmpPoint;
+		geometry_msgs::Quaternion tmpQuaternion;
+		tmpPoint.x = currentGoalX;
+		tmpPoint.y = currentGoalY;
+		tmpPoint.z = 0.0;
+		tmpQuaternion = currentGoalOrientation;
+		tmpPose.position = tmpPoint;
+		tmpPose.orientation = tmpQuaternion;
+		goal_cmd.pose =	tmpPose;
+		tmpHead.frame_id = mapFrame;
+		goal_cmd.header = tmpHead;
+
+		goal_pub.publish(goal_cmd);
+		ROS_INFO("[ASSERTIVE_BEHAVIOUR] RESUMING");
+		
+		clearedA = false;
+		clearedB = false;
+		navigating = true;
+		fighting = false;
+	}
+
 
 }
 
@@ -257,6 +387,8 @@ void Assert2Behaviour::navigatingBehaviour()
 	
 	waypointing();
 	
+	//Below is a bunch of stuff left over from the previous version of the system that I can pick at if need be.
+
 
 	/*
 	if (subjectDetected == true  && brave == false)
@@ -364,184 +496,185 @@ void Assert2Behaviour::waypointing()
 	float currentY;
 	
 	
-		if (stageMode == true)
+	if (stageMode == true)
+	{
+		currentOrientation = stagePose.pose.pose.orientation;
+		currentX = stagePose.pose.pose.position.x;
+		currentY = stagePose.pose.pose.position.y;
+	}
+	else
+	{
+		currentOrientation = latestPoses.transform.rotation;
+		currentX = latestPoses.transform.translation.x;
+		currentY = latestPoses.transform.translation.y;
+	}
+
+	/*From the starting point to the end point, but after the special start condition*/
+	if (returnTrip == false && firstGoal == true)
+	{
+		/*Hadn't reached the point just through the door yet, meaning you are now, and will now drive to the end point*/
+		if (doorReached == false)
+		{
+			float yawDiff = tf::getYaw(currentOrientation) - goalDoorYaw;
+			if (yawDiff > 3.14159)
 			{
-				currentOrientation = stagePose.pose.pose.orientation;
-				currentX = stagePose.pose.pose.position.x;
-				currentY = stagePose.pose.pose.position.y;
-			}
-			else
+				yawDiff += -6.2831;
+		    	}
+			else if (yawDiff < -3.14159)
 			{
-				currentOrientation = latestPoses.transform.rotation;
-				currentX = latestPoses.transform.translation.x;
-				currentY = latestPoses.transform.translation.y;
+				yawDiff += 6.2831;
 			}
+			if (((fabs(currentX - goalDoorX) < 0.4 && fabs(currentY - goalDoorY) < 0.4) ) && (fabs(yawDiff) < 0.3))
+			{
+				doorReached = true;
+				currentGoalX = goalX;
+				currentGoalY = goalY;
+				currentGoalOrientation = tf::createQuaternionMsgFromYaw(goalYaw);
+				std_msgs::Header tmpHead;
+				geometry_msgs::Pose tmpPose;
+				geometry_msgs::Point tmpPoint;
+				geometry_msgs::Quaternion tmpQuaternion;
+				tmpPoint.x = goalX;
+				tmpPoint.y = goalY;
+				tmpPoint.z = 0.0;
+				tmpQuaternion = currentGoalOrientation;
+				tmpPose.position = tmpPoint;
+				tmpPose.orientation = tmpQuaternion;
+				goal_cmd.pose =	tmpPose;
+				tmpHead.frame_id = mapFrame;
+				goal_cmd.header = tmpHead;
+				ROS_INFO("[ASSERTIVE_BEHAVIOUR] LOSING");
+				goal_pub.publish(goal_cmd);
+					
+
+			}
+		}
+		/*Have now reached the end point and will turn around to drive back to the door facing the start point, aiming at a point just through the door*/
+		else
+		{
 	
-			/*From the starting point to the end point, but after the special start condition*/
-			if (returnTrip == false && firstGoal == true)
+			float yawDiff = tf::getYaw(currentOrientation) - goalYaw;
+			if (yawDiff > 3.14159)
 			{
-				/*Hadn't reached the point just through the door yet, meaning you are now, and will now drive to the end point*/
-				if (doorReached == false)
-				{
-					float yawDiff = tf::getYaw(currentOrientation) - goalDoorYaw;
-					if (yawDiff > 3.14159)
-					{
-						yawDiff += -6.2831;
-				    	}
-					else if (yawDiff < -3.14159)
-					{
-						yawDiff += 6.2831;
-					}
-					if (((fabs(currentX - goalDoorX) < 0.4 && fabs(currentY - goalDoorY) < 0.4) ))//&& (fabs(yawDiff) < 0.3)
-					{
-							doorReached = true;
-							currentGoalX = goalX;
-							currentGoalY = goalY;
-
-							std_msgs::Header tmpHead;
-							geometry_msgs::Pose tmpPose;
-							geometry_msgs::Point tmpPoint;
-							geometry_msgs::Quaternion tmpQuaternion;
-							tmpPoint.x = goalX;
-							tmpPoint.y = goalY;
-							tmpPoint.z = 0.0;
-							tmpQuaternion = tf::createQuaternionMsgFromYaw(goalYaw);
-							tmpPose.position = tmpPoint;
-							tmpPose.orientation = tmpQuaternion;
-							goal_cmd.pose =	tmpPose;
-							tmpHead.frame_id = "map";
-							goal_cmd.header = tmpHead;
-
-							goal_pub.publish(goal_cmd);
-							
-
-					}
-				}
-				/*Have now reached the end point and will turn around to drive back to the door facing the start point, aiming at a point just through the door*/
-				else
-				{
-			
-					float yawDiff = tf::getYaw(currentOrientation) - goalYaw;
-					if (yawDiff > 3.14159)
-					{
-						yawDiff += -6.2831;
-				    	}
-					else if (yawDiff < -3.14159)
-					{
-						yawDiff += 6.2831;
-					}
-					if (((fabs(currentX - goalX) < 0.4 && fabs(currentY - goalY) < 0.4) ))//&& (fabs(yawDiff) < 0.3)
-					{
-							returnTrip = true;
-							doorReached = false;
-							currentGoalX = startDoorX;
-							currentGoalY = startDoorY;
-
-							std_msgs::Header tmpHead;
-							geometry_msgs::Pose tmpPose;
-							geometry_msgs::Point tmpPoint;
-							geometry_msgs::Quaternion tmpQuaternion;
-							tmpPoint.x = startDoorX;
-							tmpPoint.y = startDoorY;
-							tmpPoint.z = 0.0;
-							tmpQuaternion = tf::createQuaternionMsgFromYaw(startDoorYaw);
-							tmpPose.position = tmpPoint;
-							tmpPose.orientation = tmpQuaternion;
-							goal_cmd.pose =	tmpPose;
-							tmpHead.frame_id = "map";
-							goal_cmd.header = tmpHead;
-
-							goal_pub.publish(goal_cmd);
-
-						
-					}
-				}
-			}
-			/*Are on the return trip or the special first round*/
-			else
+				yawDiff += -6.2831;
+		    	}
+			else if (yawDiff < -3.14159)
 			{
-				/*On the way back from the end point and hadn't reached the point just through the door yet, but will now, and will now aim for the start point*/
-				if (doorReached == false)
-				{
-					float yawDiff = tf::getYaw(currentOrientation) - startDoorYaw;
-					if (yawDiff > 3.14159)
-					{
-						yawDiff += -6.2831;
-				    	}
-					else if (yawDiff < -3.14159)
-					{
-						yawDiff += 6.2831;
-					}
-					if ((fabs(currentX - startDoorX) < 0.4 && fabs(currentY - startDoorY) < 0.4) ) //&&  (fabs(yawDiff) < 0.3)
-					{
-							doorReached = true;
-							currentGoalX = startX;
-							currentGoalY = startY;
-						
-							std_msgs::Header tmpHead;
-							geometry_msgs::Pose tmpPose;
-							geometry_msgs::Point tmpPoint;
-							geometry_msgs::Quaternion tmpQuaternion;
-							tmpPoint.x = startX;
-							tmpPoint.y = startY;
-							tmpPoint.z = 0.0;
-							tmpPose.position = tmpPoint;
-							tmpQuaternion = tf::createQuaternionMsgFromYaw(startYaw);
-							tmpPose.orientation = tmpQuaternion;
-							goal_cmd.pose =	tmpPose;
-							tmpHead.frame_id = "map";
-							goal_cmd.header = tmpHead;
-
-							goal_pub.publish(goal_cmd);
-							
-						
-					}
-				}
-				else
-				/*On the return trip and have reached the point near the other side of the door, now looking for when you arrive at the start to re-target the goal door*/
-				{
-					ROS_INFO("[ASSERTIVE_BEHAVIOUR] Am I in the right place?");
-					float yawDiff = tf::getYaw(currentOrientation) - startYaw;
-					if (yawDiff > 3.14159)
-					{
-						yawDiff += -6.2831;
-				    	}
-					else if (yawDiff < -3.14159)
-					{
-						yawDiff += 6.2831;
-					}
-					if ((fabs(currentX - startX) < 0.4 && fabs(currentY - startY) < 0.4)) // &&  (fabs(yawDiff) < 0.3)
-					{
-							ROS_INFO("[ASSERTIVE_BEHAVIOUR] Goal sent!");
-							firstGoal = true;
-							returnTrip = false;
-							doorReached = false;
-							currentGoalX = goalDoorX;
-							currentGoalY = goalDoorY;
-
-
-							std_msgs::Header tmpHead;
-							geometry_msgs::Pose tmpPose;
-							geometry_msgs::Point tmpPoint;
-							geometry_msgs::Quaternion tmpQuaternion;
-							tmpPoint.x = goalDoorX;
-							tmpPoint.y = goalDoorY;
-							tmpPoint.z = 0.0;
-							tmpPose.position = tmpPoint;
-							tmpQuaternion = tf::createQuaternionMsgFromYaw(goalDoorYaw);
-							tmpPose.orientation = tmpQuaternion;
-							goal_cmd.pose =	tmpPose;
-							tmpHead.frame_id = "map";
-							goal_cmd.header = tmpHead;
-
-							goal_pub.publish(goal_cmd);
-
-						
-					}
-				}
+				yawDiff += 6.2831;
 			}
-		
-		
+			if (((fabs(currentX - goalX) < 0.4 && fabs(currentY - goalY) < 0.4) ) && (fabs(yawDiff) < 0.3))
+			{
+				returnTrip = true;
+				doorReached = false;
+				currentGoalX = startDoorX;
+				currentGoalY = startDoorY;
+				currentGoalOrientation = tf::createQuaternionMsgFromYaw(startDoorYaw);
+				std_msgs::Header tmpHead;
+				geometry_msgs::Pose tmpPose;
+				geometry_msgs::Point tmpPoint;
+				geometry_msgs::Quaternion tmpQuaternion;
+				tmpPoint.x = startDoorX;
+				tmpPoint.y = startDoorY;
+				tmpPoint.z = 0.0;
+				tmpQuaternion = currentGoalOrientation;
+				tmpPose.position = tmpPoint;
+				tmpPose.orientation = tmpQuaternion;
+				goal_cmd.pose =	tmpPose;
+				tmpHead.frame_id = mapFrame;
+				goal_cmd.header = tmpHead;
+				if (oneRun == false)
+				{
+					goal_pub.publish(goal_cmd);
+				}
+
+				
+			}
+		}
+	}
+	/*Are on the return trip or the special first round*/
+	else
+	{
+		/*On the way back from the end point and hadn't reached the point just through the door yet, but will now, and will now aim for the start point*/
+		if (doorReached == false)
+		{
+			float yawDiff = tf::getYaw(currentOrientation) - startDoorYaw;
+			if (yawDiff > 3.14159)
+			{
+				yawDiff += -6.2831;
+		    	}
+			else if (yawDiff < -3.14159)
+			{
+				yawDiff += 6.2831;
+			}
+			if ((fabs(currentX - startDoorX) < 0.4 && fabs(currentY - startDoorY) < 0.4) &&  (fabs(yawDiff) < 0.3))
+			{
+				doorReached = true;
+				currentGoalX = startX;
+				currentGoalY = startY;
+				currentGoalOrientation = tf::createQuaternionMsgFromYaw(startYaw);
+
+				std_msgs::Header tmpHead;
+				geometry_msgs::Pose tmpPose;
+				geometry_msgs::Point tmpPoint;
+				geometry_msgs::Quaternion tmpQuaternion;
+				tmpPoint.x = startX;
+				tmpPoint.y = startY;
+				tmpPoint.z = 0.0;
+				tmpPose.position = tmpPoint;
+				tmpQuaternion = currentGoalOrientation;
+				tmpPose.orientation = tmpQuaternion;
+				goal_cmd.pose =	tmpPose;
+				tmpHead.frame_id = mapFrame;
+				goal_cmd.header = tmpHead;
+
+				goal_pub.publish(goal_cmd);
+					
+				
+			}
+		}
+		else
+		/*On the return trip and have reached the point near the other side of the door, now looking for when you arrive at the start to re-target the goal door*/
+		{
+			//ROS_INFO("[ASSERTIVE_BEHAVIOUR] Am I in the right place?");
+			float yawDiff = tf::getYaw(currentOrientation) - startYaw;
+			if (yawDiff > 3.14159)
+			{
+				yawDiff += -6.2831;
+		    	}
+			else if (yawDiff < -3.14159)
+			{
+				yawDiff += 6.2831;
+			}
+			if ((fabs(currentX - startX) < 0.4 && fabs(currentY - startY) < 0.4) &&  (fabs(yawDiff) < 0.3))
+			{
+				ROS_INFO("[ASSERTIVE_BEHAVIOUR] Goal sent!");
+				firstGoal = true;
+				returnTrip = false;
+				doorReached = false;
+				currentGoalX = goalDoorX;
+				currentGoalY = goalDoorY;
+				currentGoalOrientation = tf::createQuaternionMsgFromYaw(goalDoorYaw);
+
+				std_msgs::Header tmpHead;
+				geometry_msgs::Pose tmpPose;
+				geometry_msgs::Point tmpPoint;
+				geometry_msgs::Quaternion tmpQuaternion;
+				tmpPoint.x = goalDoorX;
+				tmpPoint.y = goalDoorY;
+				tmpPoint.z = 0.0;
+				tmpPose.position = tmpPoint;
+				tmpQuaternion = currentGoalOrientation;
+				tmpPose.orientation = tmpQuaternion;
+				goal_cmd.pose =	tmpPose;
+				tmpHead.frame_id = mapFrame;
+				goal_cmd.header = tmpHead;
+
+				goal_pub.publish(goal_cmd);
+
+				
+			}
+		}
+	}		
 }
 
 
@@ -550,17 +683,16 @@ void Assert2Behaviour::spinOnce() {
 	ros::Rate rate(loopHz);
 	
 	if (laserReceived == true && poseReceived == true && subjectPoseReceived == true)
-
-    {
+	{
 		
-	    if((timer + ros::Duration(5) < ros::Time::now()) && firstTime == false)
-	    {
+		if((timer + ros::Duration(5) < ros::Time::now()) && firstTime == false)
+		{
 
 			firstTime = true;
 			ROS_INFO("[ASSERTIVE_BEHAVIOUR] Let's get started!");
-	    } 
-	     
-	    else if (firstTime == true)
+		} 
+
+		else if (firstTime == true)
 		{    
 			if(fighting)
 			{
@@ -588,18 +720,13 @@ void Assert2Behaviour::spinOnce() {
 	{
 		ROS_INFO("[ASSERTIVE_BEHAVIOUR] Stage mode: %d, pose received: %d, subject pose received: %d", stageMode, poseReceived, subjectPoseReceived);
 	}
-	
 	rate.sleep();
 	ros::spinOnce();
-	
-	
 }
 
 /*Gets called by main, runs all the time at the given rate.*/
 void Assert2Behaviour::spin() {
-  //ros::Rate rate(loopHz);
-  while (ros::ok()) {
-    spinOnce();
-	//rate.sleep();
-  }
+	while (ros::ok()) {
+		spinOnce();
+  	}
 }

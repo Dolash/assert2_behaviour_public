@@ -6,23 +6,26 @@
 <arg name="subject_pose_topic1" default = "/stage/r1/pose_ground_truth"/>
 <arg name="cmd_vel_topic1" default = "/stage/r0/cmd_vel"/>
 <arg name="multiplier_topic1" default = "/r0/multiplier"/>
+<!--<arg name="map_frame1" default = "/r0/map"/>-->
+<arg name="map_frame1" default = "/map"/>
 
-<arg name="start_x1" default = "1"/>
+<arg name="start_x1" default = "1.15"/>
 <arg name="start_y1" default = "-2"/>
-<arg name="start_yaw1" default = "-1.571"/>
-<arg name="end_x1" default = "1"/> 
+<arg name="start_yaw1" default = "1.571"/>
+<arg name="end_x1" default = "1.15"/> 
 <arg name="end_y1" default = "2"/>
-<arg name="end_yaw1" default = "1.538"/>
+<arg name="end_yaw1" default = "-1.571"/>
 
-<arg name="start_door_x1" default = "1"/> 
+<arg name="start_door_x1" default = "1.15"/> 
 <arg name="start_door_y1" default = "-1"/> 
-<arg name="start_door_yaw1" default = "1.571"/>
-<arg name="end_door_x1" default = "1"/>  
+<arg name="start_door_yaw1" default = "-1.571"/>
+<arg name="end_door_x1" default = "1.15"/>  
 <arg name="end_door_y1" default = "1"/> 
-<arg name="end_door_yaw1" default = "-1.571"/>
+<arg name="end_door_yaw1" default = "1.571"/>
 
-
-<param name ="/use_sim_time" value="true"/>
+<arg name="door_engage_distance1" default = "1.5"/> 
+<arg name="subject_door_engage_distance1" default = "1.5"/>
+<arg name="winner_multiple1" default = "1.5"/>
 
 
 <arg name="scan_topic2" default = "/stage/r1/ranger_1/laserscan"/>
@@ -30,39 +33,37 @@
 <arg name="subject_pose_topic2" default = "/stage/r0/pose_ground_truth"/>
 <arg name="cmd_vel_topic2" default = "/stage/r1/cmd_vel"/>
 <arg name="multiplier_topic2" default = "/r1/multiplier"/>
+<!--<arg name="map_frame2" default = "/r1/map"/>-->
+<arg name="map_frame2" default = "/map"/>
 
-
-<arg name="start_x2" default = "1"/>
+<arg name="start_x2" default = "0.85"/>
 <arg name="start_y2" default = "2"/>
 <arg name="start_yaw2" default = "-1.571"/>
-<arg name="end_x2" default = "1"/> 
+<arg name="end_x2" default = "0.85"/> 
 <arg name="end_y2" default = "-2"/>
-<arg name="end_yaw2" default = "1.538"/>
+<arg name="end_yaw2" default = "1.571"/>
 
-<arg name="start_door_x2" default = "1"/> 
+<arg name="start_door_x2" default = "0.85"/> 
 <arg name="start_door_y2" default = "1"/> 
 <arg name="start_door_yaw2" default = "1.571"/>
-<arg name="end_door_x2" default = "1"/>  
+<arg name="end_door_x2" default = "0.85"/>  
 <arg name="end_door_y2" default = "-1"/> 
 <arg name="end_door_yaw2" default = "-1.571"/>
 
+<arg name="door_engage_distance2" default = "1.5"/> 
+<arg name="subject_door_engage_distance2" default = "1.5"/>
+<arg name="winner_multiple2" default = "1.5"/>
 
-<!--<arg name="tolerance" default = "8"/>
-<arg name="aggression" default = "2"/>
-<arg name="lose_distance" default = "-0.9"/>
-<arg name="win_distance" default = "-0.3"/> -->
 
-<!--<arg name="tolerance" default = "8"/>
-<arg name="aggression" default = "2"/>
-<arg name="lose_distance" default = "-0.9"/>
-<arg name="win_distance" default = "-0.3"/>
-
-<arg name="use_stopper" default = "true"/>-->
 
 <arg name="door_x" default = "1"/>  
 <arg name="door_y" default = "0"/>
+<arg name="one_run" default = "true"/>
+
 
 <arg name="world" default = "simple.world"/>
+<param name ="/use_sim_time" value="true"/>
+
 
 
 <node name="stage_ros" pkg="stage_ros" type="stageros" output="screen" respawn="true" args="/home/autolab/assert2_ws/src/stage_ros/world/simple.world">
@@ -79,7 +80,7 @@
 	<remap from="/listener/cmd_vel" to="/r0/listener/cmd_vel" />
 
 </node>
-<!--
+
 <node name="emergency_stopper_r1" pkg="emergency_stopper" type="emergency_stopper" output="screen">
 	<param name="scan_topic" value="/stage/r1/ranger_1/laserscan"/>
 	<param name="loser_topic" value="/loser"/>
@@ -89,16 +90,23 @@
 	<remap from="/cmd_vel" to="/stage/r1/cmd_vel" />
 		<remap from="/listener/cmd_vel" to="/r1/listener/cmd_vel" />
 </node>
--->
-<node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_map_to_odom_r0" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0 /stage/r0/odom /map 100">
+
+<node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_map_to_odom_r0" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0  /map /stage/r0/odom 100">
 
 	</node>
-<!--
+
+<!--<node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_map_to_odom_r0" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0  /r0/map /stage/r0/odom 100">
+
+	</node>-->
+
 <node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_map_to_odom_r1" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0 /map /stage/r1/odom 100">
 	</node>
--->
 
-  <node pkg="move_base" type="move_base" respawn="true" name="move_base_r0" output="screen">
+<!--<node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_map_to_odom_r1" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0 /r1/map /stage/r1/odom 100">
+	</node>-->
+
+
+<node pkg="move_base" type="move_base" respawn="true" name="move_base_r0" output="screen">
 	
     <rosparam file="$(find rosnav)/costmap_common_params_r0.yaml" command="load" ns="global_costmap" />
     <rosparam file="$(find rosnav)/costmap_common_params_r0.yaml" command="load" ns="local_costmap" />
@@ -108,14 +116,17 @@
 	<param name="controller_frequency" value="10"/>
 	<param name="clearing_rotation_allowed" value="false"/>
 
-	<param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS"/>
+	<!--<param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS"/>-->
+	<param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
 	<remap from="/cmd_vel" to="/r0/listener/cmd_vel" />
 	<remap from="/move_base/goal" to="/r0/move_base/goal" />
 	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
-<remap from="/odom" to="/stage/r0/odom" />
+
+<!--<remap from="/map" to="/r0/map" />
+<remap from="/map_metadata" to="/r0/map_metadata" />-->
 
   </node>
-<!--
+
 <node pkg="move_base" type="move_base" respawn="true" name="move_base_r1" output="screen">
 	
     <rosparam file="$(find rosnav)/costmap_common_params_r1.yaml" command="load" ns="global_costmap" />
@@ -126,13 +137,16 @@
 	<param name="controller_frequency" value="10"/>
 	<param name="clearing_rotation_allowed" value="false"/>
 
-	<param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS"/>
+	<!--<param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS"/>-->
+	<param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
 	<remap from="/cmd_vel" to="/r1/listener/cmd_vel" />
 	<remap from="/move_base/goal" to="/r1/move_base/goal" />
 	<remap from="/move_base_simple/goal" to="/r1/move_base_simple/goal" />
 
+<!--<remap from="/map" to="/r1/map" />
+<remap from="/map_metadata" to="/r1/map_metadata" />-->
   </node>
--->
+
 
   
   <node name="assert2_behaviour_r0" pkg="assert2_behaviour" type="assert2_behaviour" output="screen">
@@ -143,6 +157,7 @@
 	<param name="subject_pose_topic" value="$(arg subject_pose_topic1)"/>
 	<param name="cmd_vel_topic" value="$(arg cmd_vel_topic1)"/>
 	<param name="multiplier_topic" value="$(arg multiplier_topic1)"/>
+	<param name="map_frame" value="$(arg map_frame1)"/>
 	<param name="start_x" value="$(arg start_x1)"/>
 	<param name="start_y" value="$(arg start_y1)"/>
 	<param name="start_yaw" value="$(arg start_yaw1)"/>
@@ -155,19 +170,24 @@
 	<param name="end_door_x" value="$(arg end_door_x1)"/>
 	<param name="end_door_y" value="$(arg end_door_y1)"/>
 	<param name="end_door_yaw" value="$(arg end_door_yaw1)"/>
+	<param name="door_engage_distance" value="$(arg door_engage_distance1)"/>
+	<param name="subject_door_engage_distance" value="$(arg subject_door_engage_distance1)"/>
+	<param name="winner_multiple" value="$(arg winner_multiple1)"/>
 	<param name="door_x" value="$(arg door_x)"/>
 	<param name="door_y" value="$(arg door_y)"/>
+	<param name="one_run" value="$(arg one_run)"/>
 	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
   </node>
   
-  <!--  <node name="assert2_behaviour_r1" pkg="assert2_behaviour" type="assert2_behaviour" output="screen">
+<node name="assert2_behaviour_r1" pkg="assert2_behaviour" type="assert2_behaviour" output="screen">
   
 	<param name="stage_mode" value="true"/>
 	<param name="scan_topic" value="$(arg scan_topic2)"/>
 	<param name="pose_topic" value="$(arg pose_topic2)"/>
-<param name="subject_pose_topic" value="$(arg subject_pose_topic1)"/>
+	<param name="subject_pose_topic" value="$(arg subject_pose_topic2)"/>
 	<param name="cmd_vel_topic" value="$(arg cmd_vel_topic2)"/>
 	<param name="multiplier_topic" value="$(arg multiplier_topic2)"/>
+	<param name="map_frame" value="$(arg map_frame2)"/>
 
 	<param name="start_x" value="$(arg start_x2)"/>
 	<param name="start_y" value="$(arg start_y2)"/>
@@ -181,8 +201,85 @@
 	<param name="end_door_x" value="$(arg end_door_x2)"/>
 	<param name="end_door_y" value="$(arg end_door_y2)"/>
 	<param name="end_door_yaw" value="$(arg end_door_yaw2)"/>
+	<param name="door_engage_distance" value="$(arg door_engage_distance2)"/>
+	<param name="subject_door_engage_distance" value="$(arg subject_door_engage_distance2)"/>
+	<param name="winner_multiple" value="$(arg winner_multiple2)"/>
 	<param name="door_x" value="$(arg door_x)"/>
 	<param name="door_y" value="$(arg door_y)"/>
+	<param name="one_run" value="$(arg one_run)"/>
+<remap from="/move_base_simple/goal" to="/r1/move_base_simple/goal" />
   </node>
--->
+
+<!--    <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping_r0" output="screen">
+      <remap from="/scan" to="$(arg scan_topic1)"/>
+	<param name="map_frame" value="/r0/map"/>
+	<param name="odom_frame" value="/stage/r0/odom"/>
+	<param name="base_frame" value="/stage/r0/base_link"/>
+	<param name="map_update_interval" value="5.0"/>
+      <param name="map_update_interval" value="5.0"/>
+      <param name="maxUrange" value="16.0"/>
+      <param name="sigma" value="0.05"/>
+      <param name="kernelSize" value="1"/>
+      <param name="lstep" value="0.05"/>
+      <param name="astep" value="0.05"/>
+      <param name="iterations" value="5"/>
+      <param name="lsigma" value="0.075"/>
+      <param name="ogain" value="3.0"/>
+      <param name="lskip" value="0"/>
+      <param name="srr" value="0.1"/>
+      <param name="srt" value="0.2"/>
+      <param name="str" value="0.1"/>
+      <param name="stt" value="0.2"/>
+      <param name="linearUpdate" value="1.0"/>
+      <param name="angularUpdate" value="0.5"/>
+      <param name="temporalUpdate" value="3.0"/>
+      <param name="resampleThreshold" value="0.5"/>
+      <param name="particles" value="30"/>
+      <param name="xmin" value="-50.0"/>
+      <param name="ymin" value="-50.0"/>
+      <param name="xmax" value="50.0"/>
+      <param name="ymax" value="50.0"/>
+      <param name="delta" value="0.05"/>
+      <param name="llsamplerange" value="0.01"/>
+      <param name="llsamplestep" value="0.01"/>
+      <param name="lasamplerange" value="0.005"/>
+      <param name="lasamplestep" value="0.005"/>
+    </node>
+
+<node pkg="gmapping" type="slam_gmapping" name="slam_gmapping_r1" output="screen">
+      <remap from="/scan" to="$(arg scan_topic1)"/>
+	<param name="map_frame" value="/r1/map"/>
+	<param name="odom_frame" value="/stage/r1/odom"/>
+	<param name="base_frame" value="/stage/r1/base_link"/>
+	<param name="map_update_interval" value="5.0"/>
+      <param name="map_update_interval" value="5.0"/>
+      <param name="maxUrange" value="16.0"/>
+      <param name="sigma" value="0.05"/>
+      <param name="kernelSize" value="1"/>
+      <param name="lstep" value="0.05"/>
+      <param name="astep" value="0.05"/>
+      <param name="iterations" value="5"/>
+      <param name="lsigma" value="0.075"/>
+      <param name="ogain" value="3.0"/>
+      <param name="lskip" value="0"/>
+      <param name="srr" value="0.1"/>
+      <param name="srt" value="0.2"/>
+      <param name="str" value="0.1"/>
+      <param name="stt" value="0.2"/>
+      <param name="linearUpdate" value="1.0"/>
+      <param name="angularUpdate" value="0.5"/>
+      <param name="temporalUpdate" value="3.0"/>
+      <param name="resampleThreshold" value="0.5"/>
+      <param name="particles" value="30"/>
+      <param name="xmin" value="-50.0"/>
+      <param name="ymin" value="-50.0"/>
+      <param name="xmax" value="50.0"/>
+      <param name="ymax" value="50.0"/>
+      <param name="delta" value="0.05"/>
+      <param name="llsamplerange" value="0.01"/>
+      <param name="llsamplestep" value="0.01"/>
+      <param name="lasamplerange" value="0.005"/>
+      <param name="lasamplestep" value="0.005"/>
+    </node>->
+
 </launch>
