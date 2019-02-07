@@ -28,6 +28,7 @@
 #include <nav_msgs/MapMetaData.h>
 #include <move_base_msgs/MoveBaseGoal.h>
 #include <rosgraph_msgs/Clock.h>
+#include <autonomy_leds_msgs/Keyframe.h>
 
 #define PI 3.14159
 #define TWO_PI 6.283185*/
@@ -52,18 +53,27 @@ private:
 	bool subjectDetected;
 	bool clearedA;
 	bool clearedB;
+	bool fightStart;
+
 
 	float parkX;
 	float parkY;
+	float parkDiffX;
+	float parkDiffY;
 	
 	bool fighting;
     bool navigating;
 	
+	bool unpaused;
+	bool listeningForUnpause;
+	bool clearLights;
+
 	std::string poseTopic;
 	std::string subjectPoseTopic;
 	std::string cmdVelTopic;
 	std::string scanTopic;
 	std::string multiplierTopic;
+	std::string joyTopic;
 
 	std::string mapFrame;
 	
@@ -91,6 +101,8 @@ private:
 	float currentGoalX;
     	float currentGoalY;
 	geometry_msgs::Quaternion currentGoalOrientation;
+
+	geometry_msgs::PoseStamped robotPose;
 	
 	float doorEngageDistance;
 	float subjectDoorEngageDistance;
@@ -107,10 +119,29 @@ private:
 
 geometry_msgs::PoseStamped goal_cmd;
 
+	autonomy_leds_msgs::Keyframe lights;
+	std::vector<std_msgs::ColorRGBA> lightColours;
+	std_msgs::ColorRGBA tempColor;
+
     bool laserReceived;
 	bool firstTime;
 
 	std::vector<float> latestLaserScan;
+
+	
+
+	/*Set these to whichever sound_player values for different sounds you want and they play at the appropriate times*/
+    int startupSound;
+    int fightStartSound;
+    int loseFightSound;
+    int winFightSound;
+    int backToNormalSound;
+    /*Set these to whichever setLights values for different light arrangements you want and they play at the appropriate times*/
+    int startupLights;
+    int fightStartLights;
+    int loseFightLights;
+    int winFightLights;
+    int backToNormalLights;
 	
 	void stagePoseCallback(const nav_msgs::Odometry::ConstPtr& pose);
   	void laserCallback(const sensor_msgs::LaserScan scanData);
@@ -118,11 +149,19 @@ geometry_msgs::PoseStamped goal_cmd;
 	void viconCallback(const geometry_msgs::TransformStamped::ConstPtr& pose);
 	void viconSubjectCallback(const geometry_msgs::TransformStamped::ConstPtr& pose);
 	void clockCallback(const rosgraph_msgs::Clock clockData);
-		void emergencyStopCallback(const std_msgs::Bool emergencyPauseData);
-	
+	void emergencyStopCallback(const std_msgs::Bool emergencyPauseData);
+	void joyCallback(const sensor_msgs::Joy joyMessage);
+	void setLights(int setting);
+
 	/*for vicon*/
 	geometry_msgs::TransformStamped latestPoses;
-    geometry_msgs::TransformStamped latestSubjectPoses;
+    	geometry_msgs::TransformStamped latestSubjectPoses;
+
+	geometry_msgs::TransformStamped latestPosesAverage;
+    	geometry_msgs::TransformStamped latestSubjectPosesAverage;
+
+	std::vector<geometry_msgs::TransformStamped> latestPosesVector;
+	std::vector<geometry_msgs::TransformStamped> latestSubjectPosesVector;
 
 	/*for stage*/
 	nav_msgs::Odometry stagePose;
@@ -144,16 +183,26 @@ protected:
  	ros::Subscriber subjectPoseSub;
 	
 	 ros::Subscriber laserSub;
+
+	ros::Subscriber joySub;
 	
+	ros::Publisher robot_pose_pub;
+
 	ros::Publisher cmd_vel_pub;
 	ros::Publisher multiplier_pub;
 	
 	ros::Subscriber clockSub;
 	
+	/*Publisher that says what sounds to play*/
+	ros::Publisher audio_pub;
+
 ros::Publisher goal_pub;
+	ros::Publisher keyframe_pub;
 
 	/*Movement orders for Pioneer*/
 	geometry_msgs::Twist move_cmd;
+	/*An audio request*/
+    std_msgs::UInt16 audio_cmd;
 
 	
 		ros::Subscriber emergencyStopSub;

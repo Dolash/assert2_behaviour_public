@@ -1,0 +1,162 @@
+<?xml version="1.0"?>
+<launch>
+
+<arg name="scan_topic1" default = "/scan"/>
+<arg name="pose_topic1" default = "/vicon/new_roy/new_roy"/>
+<arg name="subject_pose_topic1" default = "/vicon/new_helmet/new_helmet"/>
+<arg name="cmd_vel_topic1" default = "/cmd_vel"/>
+<arg name="multiplier_topic1" default = "/r0/multiplier"/>
+<!--<arg name="map_frame1" default = "/r0/map"/>-->
+<arg name="map_frame1" default = "/world"/>
+
+<arg name="start_x1" default = "0.10"/>
+<arg name="start_y1" default = "-1.66"/>
+<arg name="start_yaw1" default = "1.571"/>
+<!--<arg name="start_yaw1" default = "0.0"/>-->
+<arg name="end_x1" default = "0.10"/> 
+<arg name="end_y1" default = "4.32"/>
+<arg name="end_yaw1" default = "-1.582"/>
+<!--<arg name="end_yaw1" default = "0.99"/>-->
+
+<arg name="start_door_x1" default = "0.10"/> 
+<arg name="start_door_y1" default = "2.76"/> 
+<!--<arg name="start_door_y1" default = "2.9"/> -->
+<arg name="start_door_yaw1" default = "-1.571"/>
+<!--<arg name="start_door_yaw1" default = "0.99"/>-->
+<arg name="end_door_x1" default = "0.10"/>  
+<!--<arg name="end_door_y1" default = "1.9"/> -->
+<arg name="end_door_y1" default = "2.0"/>
+<arg name="end_door_yaw1" default = "1.571"/>
+<!--<arg name="end_door_yaw1" default = "0"/>-->
+
+<arg name="door_engage_distance1" default = "2.0"/> 
+<arg name="subject_door_engage_distance1" default = "2.0"/>
+<arg name="winner_multiple1" default = "1.3"/>
+
+<arg name="base_distance1" default = "0.38"/>
+<arg name="stopper_width1" default = "75"/>
+
+<arg name="park_diff_x1" default = "0.6"/>
+<arg name="park_diff_y1" default = "0.7"/>
+
+<arg name="door_x" default = "0.05"/>  
+<arg name="door_y" default = "2.380"/>
+<arg name="one_run" default = "false"/>
+
+<arg name="stop_speed1" default = "-0.25"/>
+
+<!--<param name ="/use_sim_time" value="true"/>-->
+
+
+
+<node pkg="sound_player" type="sound_player" name="sound_player_r0" output="screen">
+	<remap from="/sound_player" to="/r0/sound_player" />
+  </node>
+
+
+<node name="emergency_stopper_r0" pkg="emergency_stopper" type="emergency_stopper" output="screen">
+	<param name="scan_topic" value="/scan"/>
+	<param name="loser_topic" value="/loser"/>
+	<param name="multiplier_topic" value="/r0/multiplier"/>
+	<param name="use_sonar" value="false"/>
+	<param name="base_distance" value="$(arg base_distance1)"/>
+	<param name="stop_speed" value="$(arg stop_speed1)"/>
+	<param name="stopper width" value="$(arg stopper_width1)"/>
+	<remap from="/winner" to="/r0/winner" />
+	<remap from="/emergency_stop" to="/r0/emergency_stop" />
+	<remap from="/cmd_vel" to="/cmd_vel" />
+	<remap from="/listener/cmd_vel" to="/r0/listener/cmd_vel" />
+
+</node>
+
+<node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_map_to_odom_r0" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0 /vicon/new_roy/new_roy /odom 100">
+
+</node>
+<node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_world_to_map" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0 world map 100">
+
+	</node>
+
+<node pkg="tf" type="static_transform_publisher" name="static_transform_roy_to_laser" output="screen" args="0.15 0.0 0.0 0.0 0.0 0.0 /vicon/new_roy/new_roy laser 100">
+
+	</node>
+
+<!--<node pkg="tf" type="static_transform_publisher" name="static_transform_publisher_map_to_odom_r0" output="screen" args="0.0 0.0 0.0 0.0 0.0 0.0  /r0/map /stage/r0/odom 100">
+
+	</node>-->
+
+
+<node pkg="move_base" type="move_base" respawn="true" name="move_base_r0" output="screen">
+	
+    <rosparam file="$(find rosnav)/costmap_common_params_study.yaml" command="load" ns="global_costmap" />
+    <rosparam file="$(find rosnav)/costmap_common_params_study.yaml" command="load" ns="local_costmap" />
+    <rosparam file="$(find rosnav)/local_costmap_params_study.yaml" command="load" />
+    <rosparam file="$(find rosnav)/global_costmap_params_study.yaml" command="load" />
+    <rosparam file="$(find rosnav)/base_local_planner_params.yaml" command="load" />
+	<param name="controller_frequency" value="10"/>
+	<param name="clearing_rotation_allowed" value="false"/>
+	<param name="recovery_behavior_enabled" value="true"/>
+
+	<param name="base_local_planner" value="base_local_planner/TrajectoryPlannerROS"/>
+	<!--<param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>-->
+	<remap from="/cmd_vel" to="/r0/listener/cmd_vel" />
+	<remap from="/move_base/goal" to="/r0/move_base/goal" />
+	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
+	<remap from="/odom" to="/pose" />
+
+<!--<remap from="/map" to="/r0/map" />
+<remap from="/map_metadata" to="/r0/map_metadata" />-->
+
+  </node>
+
+<node pkg="rosserial_server" type="serial_node" name="rosserial_server">
+    <rosparam> 
+      port: /dev/led_strip
+      baud: 115200
+      require:
+        publishers: []    
+        subscribers: [leds/set, leds/set_led]    
+    </rosparam>
+  </node>
+  <node pkg="rosserial_python" type="message_info_service.py" 
+    name="rosserial_message_info" />
+  <node pkg="autonomy_leds_tools" type="leds_animation_engine_node" 
+    name="leds_animation_engine_node" output="screen">
+    <param name="update_rate" value="25" />
+  </node>
+
+
+  
+  <node name="assert2_behaviour_r0" pkg="assert2_behaviour" type="assert2_behaviour" output="screen" >
+  
+	<param name="stage_mode" value="false"/>
+	<param name="scan_topic" value="$(arg scan_topic1)"/>
+	<param name="pose_topic" value="$(arg pose_topic1)"/>
+	<param name="subject_pose_topic" value="$(arg subject_pose_topic1)"/>
+	<param name="cmd_vel_topic" value="$(arg cmd_vel_topic1)"/>
+	<param name="multiplier_topic" value="$(arg multiplier_topic1)"/>
+	<param name="map_frame" value="$(arg map_frame1)"/>
+	<param name="start_x" value="$(arg start_x1)"/>
+	<param name="start_y" value="$(arg start_y1)"/>
+	<param name="start_yaw" value="$(arg start_yaw1)"/>
+	<param name="end_x" value="$(arg end_x1)"/>
+	<param name="end_y" value="$(arg end_y1)"/>
+	<param name="end_yaw" value="$(arg end_yaw1)"/>
+	<param name="start_door_x" value="$(arg start_door_x1)"/>
+	<param name="start_door_y" value="$(arg start_door_y1)"/>
+	<param name="start_door_yaw" value="$(arg start_door_yaw1)"/>
+	<param name="end_door_x" value="$(arg end_door_x1)"/>
+	<param name="end_door_y" value="$(arg end_door_y1)"/>
+	<param name="end_door_yaw" value="$(arg end_door_yaw1)"/>
+	<param name="door_engage_distance" value="$(arg door_engage_distance1)"/>
+	<param name="subject_door_engage_distance" value="$(arg subject_door_engage_distance1)"/>
+	<param name="winner_multiple" value="$(arg winner_multiple1)"/>
+	<param name="door_x" value="$(arg door_x)"/>
+	<param name="door_y" value="$(arg door_y)"/>
+	<param name="park_diff_x" value="$(arg park_diff_x1)"/>
+	<param name="park_diff_y" value="$(arg park_diff_y1)"/>
+	<param name="one_run" value="$(arg one_run)"/>
+	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
+	<remap from="/sound_player" to="/r0/sound_player" />
+  </node>
+
+</launch>

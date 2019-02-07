@@ -28,14 +28,24 @@ Assert2Behaviour::Assert2Behaviour(ros::NodeHandle& nh)
 		privNh.param<float>("door_x", doorX, 1);
 		privNh.param<float>("door_y", doorY, 0);
 
+		privNh.param<float>("park_diff_x", parkDiffX, 1.0);
+		privNh.param<float>("park_diff_y", parkDiffY, 0.75);
+
 		privNh.param<float>("door_engage_distance", doorEngageDistance, 1.5);
 		privNh.param<float>("subject_door_engage_distance", subjectDoorEngageDistance, 1.5);
-		privNh.param<float>("winner_multiple", winnerMultiple, 2.0);
+		privNh.param<float>("winner_multiple", winnerMultiple, 1.25);
 		privNh.param<bool>("one_run", oneRun, false);
 		privNh.param<std::string>("map_frame", mapFrame, "map");
+
+		privNh.param<std::string>("joy_topic", joyTopic, "/joy");
+
 		firstTime = false;
 		poseReceived = false;
 		subjectPoseReceived = false;
+
+		listeningForUnpause = false;
+		unpaused = false;
+		bool clearLights;
 
 		/*state variables for which of the four movement goals to be targeting*/
 		firstGoal = false;
@@ -44,6 +54,7 @@ Assert2Behaviour::Assert2Behaviour(ros::NodeHandle& nh)
 
 		clearedA = false;
 		clearedB = false;
+		fightStart = false;
 
 		parkX = 0.0;
 		parkY = 0.0;
@@ -53,7 +64,7 @@ Assert2Behaviour::Assert2Behaviour(ros::NodeHandle& nh)
 		emergencyPause.data = false;
 		fighting = false;
         	navigating = true;
-		laserReceived = false;
+		laserReceived = true;
 		
 		currentGoalX = goalDoorX;
 		currentGoalY = goalDoorY;
@@ -62,6 +73,28 @@ Assert2Behaviour::Assert2Behaviour(ros::NodeHandle& nh)
 		multiplier.data = 1.0;
 		currentVelocity = 1.0;
 		currentSubjectVelocity = 1.0;
+
+		startupLights = 0;
+        	fightStartLights = 1;
+        	loseFightLights = 2;
+        	winFightLights = 3;
+        	backToNormalLights = 4;
+
+		startupSound = 22;
+        	fightStartSound = 23;
+        	loseFightSound = 24;
+        	winFightSound = 25;
+        	backToNormalSound = 26;
+
+		tempColor.r = 0;
+        	tempColor.g = 0;
+        	tempColor.b = 0;
+        	tempColor.a = 0;
+        	for (int i = 0; i < 1; i++)
+        	{
+            		lightColours.push_back(tempColor);
+        	}
+        	lights.color_pattern = lightColours;
 		
 		//Set in both Stage and Vicon settings for a 5-second ROS wait before things begin
 		timer = ros::Time::now();
@@ -70,8 +103,8 @@ Assert2Behaviour::Assert2Behaviour(ros::NodeHandle& nh)
 
 		if (stageMode == false)
 		{
-			poseSub = nh.subscribe("/global_poses", 1, &Assert2Behaviour::viconCallback, this);
-			subjectPoseSub = nh.subscribe("/vicon/subject/subject", 1, &Assert2Behaviour::viconSubjectCallback, this);
+			poseSub = nh.subscribe(poseTopic, 1, &Assert2Behaviour::viconCallback, this);
+			subjectPoseSub = nh.subscribe(subjectPoseTopic, 1, &Assert2Behaviour::viconSubjectCallback, this);
 			
 		}
 		else
@@ -82,12 +115,15 @@ Assert2Behaviour::Assert2Behaviour(ros::NodeHandle& nh)
 			
 			
 		}
-		
+		joySub = nh.subscribe(joyTopic, 1, &Assert2Behaviour::joyCallback, this);
 		emergencyStopSub = nh.subscribe("/emergency_stop", 1, &Assert2Behaviour::emergencyStopCallback, this);
 		laserSub = nh.subscribe(scanTopic, 1, &Assert2Behaviour::laserCallback, this);
 		goal_pub = nh.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 1);
 		cmd_vel_pub = nh.advertise<geometry_msgs::Twist>(cmdVelTopic, 30);
 		multiplier_pub = nh.advertise<std_msgs::Float32>(multiplierTopic, 30);
+		keyframe_pub = nh.advertise<autonomy_leds_msgs::Keyframe>("/leds/display", 1);
+		audio_pub = nh.advertise<std_msgs::UInt16>("/sound_player", 1, true);
+		robot_pose_pub = nh.advertise<geometry_msgs::PoseStamped>("/roy_robot_pose", 1, true);
 }
 
 Assert2Behaviour::~Assert2Behaviour() {
@@ -110,6 +146,26 @@ void Assert2Behaviour::viconSubjectCallback(const geometry_msgs::TransformStampe
 }
 void Assert2Behaviour::viconCallback(const geometry_msgs::TransformStamped::ConstPtr& pose) {
 	latestPoses = *pose;
+	latestPosesVector.insert(latestPosesVector.end(),latestPoses);
+	if(latestPosesVector.size() > 7)
+	{
+		latestPosesVector.erase(latestPosesVector.begin());
+	}
+			std_msgs::Header tmpHead;
+			geometry_msgs::Pose tmpPose;
+			geometry_msgs::Point tmpPoint;
+			//geometry_msgs::Quaternion tmpQuaternion;
+			tmpPoint.x = latestPoses.transform.translation.x;
+			tmpPoint.y = latestPoses.transform.translation.y;
+			tmpPoint.z = 0.0;
+
+			tmpPose.position = tmpPoint;
+			tmpPose.orientation = latestPoses.transform.rotation;
+			//tmpPose.orientation = tmpQuaternion;
+			robotPose.pose = tmpPose;
+			tmpHead.frame_id = "world";
+			robotPose.header = tmpHead;
+			robot_pose_pub.publish(robotPose);
 	poseReceived = true;
 }
 
@@ -130,6 +186,105 @@ void Assert2Behaviour::emergencyStopCallback(const std_msgs::Bool emergencyPause
 }
 
 
+
+void Assert2Behaviour::setLights(int setting)
+{
+
+    if (setting == 0)
+    {
+        lights.duration = 60;
+        lights.start_index = 12;
+        lights.pattern_repeat = 10;
+        for (int i = 0; i < 1; i++)
+        {
+            lights.color_pattern[i].r = 1;
+            lights.color_pattern[i].g = 1;
+            lights.color_pattern[i].b = 1;
+            lights.color_pattern[i].a = 0;
+        }
+        
+    }
+    else if (setting == 1)
+    {
+        lights.duration = 60;
+        lights.start_index = 12;
+        lights.pattern_repeat = 10;
+        for (int i = 0; i < 1; i++)
+        {
+            lights.color_pattern[i].r = 0;
+            lights.color_pattern[i].g = 1;
+            lights.color_pattern[i].b = 1;
+            lights.color_pattern[i].a = 0;
+        }
+    }
+    else if (setting == 2)
+    {
+        lights.duration = 60;
+        lights.start_index = 12;
+        lights.pattern_repeat = 10;
+        for (int i = 0; i < 1; i++)
+        {
+            lights.color_pattern[i].r = 1.0;
+            lights.color_pattern[i].g = 0;
+            lights.color_pattern[i].b = 0;
+            lights.color_pattern[i].a = 0;
+        }
+    }
+    else if (setting == 3)
+    {
+        lights.duration = 60;
+        lights.start_index = 12;
+        lights.pattern_repeat = 10;
+        for (int i = 0; i < 1; i++)
+        {
+            lights.color_pattern[i].r = 0;
+            lights.color_pattern[i].g = 1;
+            lights.color_pattern[i].b = 0;
+            lights.color_pattern[i].a = 0;
+        }
+    }
+    else if (setting == 4)
+    {
+        lights.duration = 60;
+        lights.start_index = 12;
+        lights.pattern_repeat = 10;
+        for (int i = 0; i < 1; i++)
+        {
+		
+            		lights.color_pattern[i].r = 0;
+            		lights.color_pattern[i].g = 0;
+            		lights.color_pattern[i].b = 1;
+            		lights.color_pattern[i].a = 0;
+		
+		
+        }
+    }
+	
+
+    keyframe_pub.publish(lights);
+}
+
+
+void Assert2Behaviour::joyCallback(const sensor_msgs::Joy joyMessage) {
+	//ROS_INFO("[ASSERTIVE_BEHAVIOUR] Joy message received.");
+	if (listeningForUnpause == true)
+	{
+		ROS_INFO("[ASSERTIVE_BEHAVIOUR] listening.");
+		if (joyMessage.buttons[1] == 1)
+		{
+			unpaused = true;
+			ROS_INFO("[ASSERTIVE_BEHAVIOUR] Unpaused.");
+		}
+		else
+		{
+			ROS_INFO("[ASSERTIVE_BEHAVIOUR] Wrong button pressed or no button pressed.");
+		}
+	}
+	else
+	{
+		ROS_INFO("[ASSERTIVE_BEHAVIOUR] Not listening.");
+	}
+}
 
 
 /*For calculating the angle we want to be turned in order to be facing our target, given your pose and the goal location's pose*/
@@ -182,7 +337,7 @@ void Assert2Behaviour::subjectAhead()
 		currentY = latestPoses.transform.translation.y;
 		subjectCurrentX = latestSubjectPoses.transform.translation.x;
 		subjectCurrentY = latestSubjectPoses.transform.translation.y;
-		yaw = tf::getYaw(latestPoses.transform.rotation);;
+		yaw = tf::getYaw(latestPoses.transform.rotation);
 	}
 	angleToSubject = getDesiredAngle(subjectCurrentX, subjectCurrentY, currentX, currentY);
     
@@ -202,7 +357,9 @@ void Assert2Behaviour::subjectAhead()
 	&&	
 	sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) < subjectDoorEngageDistance
 	&&
-	sqrt(((currentGoalX - subjectCurrentX)*(currentGoalX - subjectCurrentX)) + ((currentGoalY - subjectCurrentY)*(currentGoalY - subjectCurrentY))) < sqrt(((currentGoalX - currentX)*(currentGoalX - currentX)) + ((currentGoalY - currentY)*(currentGoalY - currentY)))
+	//sqrt(((currentGoalX - subjectCurrentX)*(currentGoalX - subjectCurrentX)) + ((currentGoalY - subjectCurrentY)*(currentGoalY - subjectCurrentY))) < sqrt(((currentGoalX - currentX)*(currentGoalX - currentX)) + ((currentGoalY - currentY)*(currentGoalY - currentY)))
+	//((currentY < doorY && currentY < subjectCurrentY) || (currentY > doorY && currentY > subjectCurrentY))
+	((returnTrip == false && currentY < subjectCurrentY) || (returnTrip == true && currentY > subjectCurrentY))
  	)
 	{
         
@@ -220,13 +377,21 @@ void Assert2Behaviour::subjectAhead()
 
 			/*If you are closer to the door than your opponant, carry on, speed up*/
 		if (
-		(sqrt(((doorX - currentX)*(doorX - currentX)) + ((doorY - currentY)*(doorY - currentY))) / currentVelocity)
+		(sqrt(((doorX - currentX)*(doorX - currentX)) + ((doorY - currentY)*(doorY - currentY))) )
 		<	
-		(sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) / currentSubjectVelocity )
+		(sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) )
 		)
 		{
 			multiplier.data = winnerMultiple;
 			multiplier_pub.publish(multiplier);
+			if (fightStart == false)
+			{
+				
+				audio_cmd.data = winFightSound;
+                		audio_pub.publish(audio_cmd);
+                		setLights(winFightLights);
+				fightStart = true;
+			}
 						
 		}
 			/*If you are further than your opponant, go into park*/
@@ -235,22 +400,25 @@ void Assert2Behaviour::subjectAhead()
 			navigating = false;
 			fighting = true;
 				
-			
-			if (currentX < doorX)
+			audio_cmd.data = loseFightSound;
+                	audio_pub.publish(audio_cmd);
+                	setLights(loseFightLights);
+
+			if (currentX < subjectCurrentX)
 			{
-				parkX = doorX - 1.0f;
+				parkX = doorX - parkDiffX;
 			}
 			else
 			{
-				parkX = doorX + 1.0f;
+				parkX = doorX + parkDiffX;
 			}
 			if (currentY < doorY)
 			{
-				parkY = doorY - 1.0f;
+				parkY = doorY - parkDiffY;
 			}
 			else
 			{
-				parkY = doorY + 1.0f;
+				parkY = doorY + parkDiffY;
 			}
 			std_msgs::Header tmpHead;
 			geometry_msgs::Pose tmpPose;
@@ -260,24 +428,33 @@ void Assert2Behaviour::subjectAhead()
 			tmpPoint.y = parkY;
 			tmpPoint.z = 0.0;
 
-			tf::Quaternion q_rot, q_orig, q_new;
-			double r=0, p=0, y=-1.572595;
+			/*tf::Quaternion q_rot, q_orig, q_new;
+			double r=0, p=0, y=0.7854;
 			q_rot = tf::createQuaternionFromRPY(r, p, y);
 			quaternionMsgToTF(currentGoalOrientation, q_orig);
 			q_new = q_rot*q_orig;
 			q_new.normalize();
-			quaternionTFToMsg(q_new, tmpQuaternion); 
+			quaternionTFToMsg(q_new, tmpQuaternion);*/ 
 			tmpPose.position = tmpPoint;
-			tmpPose.orientation = currentGoalOrientation;
+			if (returnTrip == false)
+			{
+				tmpQuaternion = tf::createQuaternionMsgFromYaw(startYaw);
+			}
+			else
+			{
+				tmpQuaternion = tf::createQuaternionMsgFromYaw(goalYaw);
+			}
+			tmpPose.orientation = tmpQuaternion;
 			//tmpPose.orientation = tmpQuaternion;
 			goal_cmd.pose =	tmpPose;
 			tmpHead.frame_id = mapFrame;
 			goal_cmd.header = tmpHead;
-
+			
+			multiplier.data = 1.0;
+			multiplier_pub.publish(multiplier);
 			goal_pub.publish(goal_cmd);
 			ROS_INFO("[ASSERTIVE_BEHAVIOUR] PARKING");
-			//multiplier.data = 0.5;
-			//multiplier_pub.publish(multiplier);
+			
 		
 		}
 	}
@@ -286,6 +463,7 @@ void Assert2Behaviour::subjectAhead()
 		
 		multiplier.data = 1.0;
 		multiplier_pub.publish(multiplier);
+		fightStart = false;
 	}
 
 
@@ -299,6 +477,7 @@ void Assert2Behaviour::fightingBehaviour()
 	float currentY;
 	float subjectCurrentX;
 	float subjectCurrentY;
+	geometry_msgs::Quaternion currentOrientation;
 
 
 	if (stageMode == true)
@@ -314,20 +493,114 @@ void Assert2Behaviour::fightingBehaviour()
 		currentY = latestPoses.transform.translation.y;
 		subjectCurrentX = latestSubjectPoses.transform.translation.x;
 		subjectCurrentY = latestSubjectPoses.transform.translation.y;
+		currentOrientation = latestPoses.transform.rotation;
 	}
-	/*If the subject is now far enough away from the door that, by the previous term used to start the fight, they must now be moving away from the conflict*/	
-	if (sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) > (subjectDoorEngageDistance + 0.1) && clearedA == false)
+
+
+	float yawDiff;
+	if (returnTrip == false)
 	{
-		clearedA = true;
+		yawDiff = tf::getYaw(currentOrientation) - goalDoorYaw;
+		if (yawDiff > 3.14159)
+		{
+			yawDiff += -6.2831;
+	    	}
+		else if (yawDiff < -3.14159)
+		{
+			yawDiff += 6.2831;
+		}
 	}
- 	if (((fabs(currentX - parkX) < 0.4 && fabs(currentY - parkY) < 0.4) ) && clearedB == false ) //&& (fabs(yawPark) < 0.3)
+	else
+	{
+		yawDiff = tf::getYaw(currentOrientation) - startDoorYaw;
+		if (yawDiff > 3.14159)
+		{
+			yawDiff += -6.2831;
+	    	}
+		else if (yawDiff < -3.14159)
+		{
+			yawDiff += 6.2831;
+		}
+	}
+			
+
+
+	/*If the subject is now far enough away from the door that, by the previous term used to start the fight, they must now be moving away from the conflict*/	
+	//if (sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) > (subjectDoorEngageDistance + 0.1) && clearedA == false)
+	if (sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) > (sqrt(((doorX - currentX)*(doorX - currentX)) + ((doorY - currentY)*(doorY - currentY))) + 0.15)  && clearedA == false)
 	{
 		std_msgs::Header tmpHead;
 		geometry_msgs::Pose tmpPose;
 		geometry_msgs::Point tmpPoint;
 		geometry_msgs::Quaternion tmpQuaternion;
-		tmpPoint.x = doorX;
-		tmpPoint.y = doorY;
+		
+
+		if (returnTrip == false)
+		{
+			tmpPoint.x = goalDoorX;
+			tmpPoint.y = goalDoorY;
+			tmpPoint.z = 0.0;
+			tmpQuaternion = tf::createQuaternionMsgFromYaw(goalDoorYaw);
+		}
+		else
+		{
+			tmpPoint.x = startDoorX;
+			tmpPoint.y = startDoorY;
+			tmpPoint.z = 0.0;
+			
+			tmpQuaternion = tf::createQuaternionMsgFromYaw(startDoorYaw);
+		}
+		tmpPose.position = tmpPoint;
+		tmpPose.orientation = tmpQuaternion;
+		goal_cmd.pose =	tmpPose;
+		tmpHead.frame_id = mapFrame;
+		goal_cmd.header = tmpHead;
+
+		goal_pub.publish(goal_cmd);
+		ROS_INFO("[ASSERTIVE_BEHAVIOUR] Returning");
+		audio_cmd.data = backToNormalSound;
+		audio_pub.publish(audio_cmd);
+		setLights(backToNormalLights);
+
+		clearedA = true;
+		
+	}
+	if (clearedA == true && ( (((fabs(currentX - goalDoorX) < 0.4 && fabs(currentY - goalDoorY) < 0.4) ) && (fabs(yawDiff) < 0.3)) || (((fabs(currentX - startDoorX) < 0.4 && fabs(currentY - startDoorY) < 0.4) ) && (fabs(yawDiff) < 0.3))))
+	{
+		std_msgs::Header tmpHead;
+		geometry_msgs::Pose tmpPose;
+		geometry_msgs::Point tmpPoint;
+		geometry_msgs::Quaternion tmpQuaternion;
+		//tmpPoint.x = doorX;
+		//tmpPoint.y = doorY;
+		tmpPoint.x = currentGoalX;
+		tmpPoint.y = currentGoalY;
+		tmpPoint.z = 0.0;
+		tmpQuaternion = currentGoalOrientation;
+		tmpPose.position = tmpPoint;
+		tmpPose.orientation = tmpQuaternion;
+		goal_cmd.pose =	tmpPose;
+		tmpHead.frame_id = mapFrame;
+		goal_cmd.header = tmpHead;
+
+		goal_pub.publish(goal_cmd);
+
+		clearedA = false;
+		ROS_INFO("[ASSERTIVE_BEHAVIOUR] resuming!");
+		navigating = true;
+		fighting = false;
+	}
+	
+ 	/*else if (((fabs(currentX - parkX) < 0.4 && fabs(currentY - parkY) < 0.4))) //) && clearedB == false ) //&& (fabs(yawPark) < 0.3)
+	{
+		std_msgs::Header tmpHead;
+		geometry_msgs::Pose tmpPose;
+		geometry_msgs::Point tmpPoint;
+		geometry_msgs::Quaternion tmpQuaternion;
+		//tmpPoint.x = doorX;
+		//tmpPoint.y = doorY;
+		tmpPoint.x = currentGoalX;
+		tmpPoint.y = currentGoalY;
 		tmpPoint.z = 0.0;
 		tmpQuaternion = currentGoalOrientation;
 		tmpPose.position = tmpPoint;
@@ -338,9 +611,13 @@ void Assert2Behaviour::fightingBehaviour()
 
 		goal_pub.publish(goal_cmd);
 		ROS_INFO("[ASSERTIVE_BEHAVIOUR] TURNING");
+		audio_cmd.data = backToNormalSound;
+		audio_pub.publish(audio_cmd);
+		setLights(backToNormalLights);
 
 		clearedB = true;
-	}
+	}*/
+	/* to remind you, it was if / if / else if before
 	else if (clearedA == true && clearedB == true)
 	{
 		std_msgs::Header tmpHead;
@@ -364,7 +641,10 @@ void Assert2Behaviour::fightingBehaviour()
 		clearedB = false;
 		navigating = true;
 		fighting = false;
-	}
+
+		
+
+	}*/
 
 
 }
@@ -380,13 +660,15 @@ void Assert2Behaviour::navigatingBehaviour()
 	{
 		tempTime = clockTime.clock;
 	}
+	//ROS_INFO("[ASSERTIVE_BEHAVIOUR] Do I make it to nav?");
+
 	subjectAhead();
 
-
-
+	//ROS_INFO("[ASSERTIVE_BEHAVIOUR] Done ahead");
+	
 	
 	waypointing();
-	
+	//ROS_INFO("[ASSERTIVE_BEHAVIOUR] waypointed");
 	//Below is a bunch of stuff left over from the previous version of the system that I can pick at if need be.
 
 
@@ -543,7 +825,7 @@ void Assert2Behaviour::waypointing()
 				goal_cmd.pose =	tmpPose;
 				tmpHead.frame_id = mapFrame;
 				goal_cmd.header = tmpHead;
-				ROS_INFO("[ASSERTIVE_BEHAVIOUR] LOSING");
+				//ROS_INFO("[ASSERTIVE_BEHAVIOUR] LOSING");
 				goal_pub.publish(goal_cmd);
 					
 
@@ -564,27 +846,43 @@ void Assert2Behaviour::waypointing()
 			}
 			if (((fabs(currentX - goalX) < 0.4 && fabs(currentY - goalY) < 0.4) ) && (fabs(yawDiff) < 0.3))
 			{
-				returnTrip = true;
-				doorReached = false;
-				currentGoalX = startDoorX;
-				currentGoalY = startDoorY;
-				currentGoalOrientation = tf::createQuaternionMsgFromYaw(startDoorYaw);
-				std_msgs::Header tmpHead;
-				geometry_msgs::Pose tmpPose;
-				geometry_msgs::Point tmpPoint;
-				geometry_msgs::Quaternion tmpQuaternion;
-				tmpPoint.x = startDoorX;
-				tmpPoint.y = startDoorY;
-				tmpPoint.z = 0.0;
-				tmpQuaternion = currentGoalOrientation;
-				tmpPose.position = tmpPoint;
-				tmpPose.orientation = tmpQuaternion;
-				goal_cmd.pose =	tmpPose;
-				tmpHead.frame_id = mapFrame;
-				goal_cmd.header = tmpHead;
-				if (oneRun == false)
+				if(unpaused == false)
 				{
-					goal_pub.publish(goal_cmd);
+
+					listeningForUnpause = true;
+					move_cmd.linear.x = 0.0;
+					move_cmd.angular.z = 0.0;
+					cmd_vel_pub.publish(move_cmd);
+					clearLights = true;
+					setLights(backToNormalLights);
+				}
+				else
+				{
+					listeningForUnpause = false;
+					unpaused = false;
+					clearLights = false;
+					returnTrip = true;
+					doorReached = false;
+					currentGoalX = startDoorX;
+					currentGoalY = startDoorY;
+					currentGoalOrientation = tf::createQuaternionMsgFromYaw(startDoorYaw);
+					std_msgs::Header tmpHead;
+					geometry_msgs::Pose tmpPose;
+					geometry_msgs::Point tmpPoint;
+					geometry_msgs::Quaternion tmpQuaternion;
+					tmpPoint.x = startDoorX;
+					tmpPoint.y = startDoorY;
+					tmpPoint.z = 0.0;
+					tmpQuaternion = currentGoalOrientation;
+					tmpPose.position = tmpPoint;
+					tmpPose.orientation = tmpQuaternion;
+					goal_cmd.pose =	tmpPose;
+					tmpHead.frame_id = mapFrame;
+					goal_cmd.header = tmpHead;
+					if (oneRun == false)
+					{
+						goal_pub.publish(goal_cmd);
+					}
 				}
 
 				
@@ -608,6 +906,7 @@ void Assert2Behaviour::waypointing()
 			}
 			if ((fabs(currentX - startDoorX) < 0.4 && fabs(currentY - startDoorY) < 0.4) &&  (fabs(yawDiff) < 0.3))
 			{
+			
 				doorReached = true;
 				currentGoalX = startX;
 				currentGoalY = startY;
@@ -645,31 +944,47 @@ void Assert2Behaviour::waypointing()
 			{
 				yawDiff += 6.2831;
 			}
-			if ((fabs(currentX - startX) < 0.4 && fabs(currentY - startY) < 0.4) &&  (fabs(yawDiff) < 0.3))
+			if (((fabs(currentX - startX) < 0.4 && fabs(currentY - startY) < 0.4) &&  (fabs(yawDiff) < 0.3)) || firstGoal == false)
 			{
-				ROS_INFO("[ASSERTIVE_BEHAVIOUR] Goal sent!");
-				firstGoal = true;
-				returnTrip = false;
-				doorReached = false;
-				currentGoalX = goalDoorX;
-				currentGoalY = goalDoorY;
-				currentGoalOrientation = tf::createQuaternionMsgFromYaw(goalDoorYaw);
+				if(unpaused == false)
+				{
 
-				std_msgs::Header tmpHead;
-				geometry_msgs::Pose tmpPose;
-				geometry_msgs::Point tmpPoint;
-				geometry_msgs::Quaternion tmpQuaternion;
-				tmpPoint.x = goalDoorX;
-				tmpPoint.y = goalDoorY;
-				tmpPoint.z = 0.0;
-				tmpPose.position = tmpPoint;
-				tmpQuaternion = currentGoalOrientation;
-				tmpPose.orientation = tmpQuaternion;
-				goal_cmd.pose =	tmpPose;
-				tmpHead.frame_id = mapFrame;
-				goal_cmd.header = tmpHead;
+					listeningForUnpause = true;
+					move_cmd.linear.x = 0.0;
+					move_cmd.angular.z = 0.0;
+					cmd_vel_pub.publish(move_cmd);
+					clearLights = true;
+					setLights(backToNormalLights);
+				}
+				else
+				{
+					ROS_INFO("[ASSERTIVE_BEHAVIOUR] Goal sent!");
+					firstGoal = true;
+					returnTrip = false;
+					doorReached = false;
+					listeningForUnpause = false;
+					unpaused = false;
+					clearLights = false;
+					currentGoalX = goalDoorX;
+					currentGoalY = goalDoorY;
+					currentGoalOrientation = tf::createQuaternionMsgFromYaw(goalDoorYaw);
 
-				goal_pub.publish(goal_cmd);
+					std_msgs::Header tmpHead;
+					geometry_msgs::Pose tmpPose;
+					geometry_msgs::Point tmpPoint;
+					geometry_msgs::Quaternion tmpQuaternion;
+					tmpPoint.x = goalDoorX;
+					tmpPoint.y = goalDoorY;
+					tmpPoint.z = 0.0;
+					tmpPose.position = tmpPoint;
+					tmpQuaternion = currentGoalOrientation;
+					tmpPose.orientation = tmpQuaternion;
+					goal_cmd.pose =	tmpPose;
+					tmpHead.frame_id = mapFrame;
+					goal_cmd.header = tmpHead;
+
+					goal_pub.publish(goal_cmd);
+				}
 
 				
 			}
@@ -682,12 +997,20 @@ void Assert2Behaviour::waypointing()
 void Assert2Behaviour::spinOnce() {
 	ros::Rate rate(loopHz);
 	
+	if (stageMode == true)
+	{
+		unpaused = true;
+	}
+
+
 	if (laserReceived == true && poseReceived == true && subjectPoseReceived == true)
 	{
 		
 		if((timer + ros::Duration(5) < ros::Time::now()) && firstTime == false)
 		{
-
+			audio_cmd.data = startupSound;
+			audio_pub.publish(audio_cmd);
+			setLights(startupLights);
 			firstTime = true;
 			ROS_INFO("[ASSERTIVE_BEHAVIOUR] Let's get started!");
 		} 

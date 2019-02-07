@@ -10,10 +10,10 @@
 <arg name="map_frame1" default = "/map"/>
 
 <arg name="start_x1" default = "1.15"/>
-<arg name="start_y1" default = "-2"/>
+<arg name="start_y1" default = "-2.5"/>
 <arg name="start_yaw1" default = "1.571"/>
 <arg name="end_x1" default = "1.15"/> 
-<arg name="end_y1" default = "2"/>
+<arg name="end_y1" default = "2.5"/>
 <arg name="end_yaw1" default = "-1.571"/>
 
 <arg name="start_door_x1" default = "1.15"/> 
@@ -23,8 +23,8 @@
 <arg name="end_door_y1" default = "1"/> 
 <arg name="end_door_yaw1" default = "1.571"/>
 
-<arg name="door_engage_distance1" default = "1.5"/> 
-<arg name="subject_door_engage_distance1" default = "1.5"/>
+<arg name="door_engage_distance1" default = "2"/> 
+<arg name="subject_door_engage_distance1" default = "2"/>
 <arg name="winner_multiple1" default = "1.5"/>
 
 
@@ -37,10 +37,10 @@
 <arg name="map_frame2" default = "/map"/>
 
 <arg name="start_x2" default = "0.85"/>
-<arg name="start_y2" default = "2"/>
+<arg name="start_y2" default = "2.5"/>
 <arg name="start_yaw2" default = "-1.571"/>
 <arg name="end_x2" default = "0.85"/> 
-<arg name="end_y2" default = "-2"/>
+<arg name="end_y2" default = "-2.5"/>
 <arg name="end_yaw2" default = "1.571"/>
 
 <arg name="start_door_x2" default = "0.85"/> 
@@ -50,8 +50,8 @@
 <arg name="end_door_y2" default = "-1"/> 
 <arg name="end_door_yaw2" default = "-1.571"/>
 
-<arg name="door_engage_distance2" default = "1.5"/> 
-<arg name="subject_door_engage_distance2" default = "1.5"/>
+<arg name="door_engage_distance2" default = "2"/> 
+<arg name="subject_door_engage_distance2" default = "2"/>
 <arg name="winner_multiple2" default = "1.5"/>
 
 
@@ -69,6 +69,15 @@
 <node name="stage_ros" pkg="stage_ros" type="stageros" output="screen" respawn="true" args="/home/autolab/assert2_ws/src/stage_ros/world/simple.world">
 	
   </node>
+
+<node pkg="sound_player" type="sound_player" name="sound_player_r0" output="screen">
+	<remap from="/sound_player" to="/r0/sound_player" />
+  </node>
+
+<node pkg="sound_player" type="sound_player" name="sound_player_r1" output="screen">
+	<remap from="/sound_player" to="/r1/sound_player" />
+  </node>
+
 
 <node name="emergency_stopper_r0" pkg="emergency_stopper" type="emergency_stopper" output="screen">
 	<param name="scan_topic" value="/stage/r0/ranger_1/laserscan"/>
@@ -149,7 +158,7 @@
 
 
   
-  <node name="assert2_behaviour_r0" pkg="assert2_behaviour" type="assert2_behaviour" output="screen">
+  <node name="assert2_behaviour_r0" pkg="assert2_behaviour" type="assert2_behaviour" output="screen" launch-prefix="xterm -e gdb -ex start --args" >
   
 	<param name="stage_mode" value="true"/>
 	<param name="scan_topic" value="$(arg scan_topic1)"/>
@@ -177,6 +186,7 @@
 	<param name="door_y" value="$(arg door_y)"/>
 	<param name="one_run" value="$(arg one_run)"/>
 	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
+	<remap from="/sound_player" to="/r0/sound_player" />
   </node>
   
 <node name="assert2_behaviour_r1" pkg="assert2_behaviour" type="assert2_behaviour" output="screen">
@@ -208,6 +218,7 @@
 	<param name="door_y" value="$(arg door_y)"/>
 	<param name="one_run" value="$(arg one_run)"/>
 <remap from="/move_base_simple/goal" to="/r1/move_base_simple/goal" />
+<remap from="/sound_player" to="/r1/sound_player" />
   </node>
 
 <!--    <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping_r0" output="screen">
@@ -280,6 +291,6 @@
       <param name="llsamplestep" value="0.01"/>
       <param name="lasamplerange" value="0.005"/>
       <param name="lasamplestep" value="0.005"/>
-    </node>->
+    </node>-->
 
 </launch>
