@@ -9,25 +9,31 @@
 <!--<arg name="map_frame1" default = "/r0/map"/>-->
 <arg name="map_frame1" default = "/world"/>
 
-<arg name="start_x1" default = "0.10"/>
-<arg name="start_y1" default = "-1.66"/>
+<arg name="start_x1" default = "0.066"/>
+<arg name="start_y1" default = "-1.71"/>
 <arg name="start_yaw1" default = "1.571"/>
-<!--<arg name="start_yaw1" default = "0.0"/>-->
-<arg name="end_x1" default = "0.10"/> 
-<arg name="end_y1" default = "4.32"/>
+<!--<arg name="start_x1" default = "0.10"/>
+<arg name="start_y1" default = "-1.66"/>
+<arg name="start_yaw1" default = "1.571"/>-->
+<arg name="end_x1" default = "0.12"/> 
+<arg name="end_y1" default = "4.25"/>
 <arg name="end_yaw1" default = "-1.582"/>
-<!--<arg name="end_yaw1" default = "0.99"/>-->
+<!--<arg name="end_x1" default = "0.10"/> 
+<arg name="end_y1" default = "4.32"/>
+<arg name="end_yaw1" default = "-1.582"/>-->
 
-<arg name="start_door_x1" default = "0.10"/> 
-<arg name="start_door_y1" default = "2.76"/> 
-<!--<arg name="start_door_y1" default = "2.9"/> -->
+<arg name="start_door_x1" default = "0.13"/> 
+<arg name="start_door_y1" default = "2.80"/> 
 <arg name="start_door_yaw1" default = "-1.571"/>
-<!--<arg name="start_door_yaw1" default = "0.99"/>-->
-<arg name="end_door_x1" default = "0.10"/>  
-<!--<arg name="end_door_y1" default = "1.9"/> -->
-<arg name="end_door_y1" default = "2.0"/>
+<!--<arg name="start_door_x1" default = "0.10"/> 
+<arg name="start_door_y1" default = "2.76"/> 
+<arg name="start_door_yaw1" default = "-1.571"/>-->
+<arg name="end_door_x1" default = "0.067"/>  
+<arg name="end_door_y1" default = "2.063"/>
 <arg name="end_door_yaw1" default = "1.571"/>
-<!--<arg name="end_door_yaw1" default = "0"/>-->
+<!--<arg name="end_door_x1" default = "0.10"/>  
+<arg name="end_door_y1" default = "2.0"/>
+<arg name="end_door_yaw1" default = "1.571"/>-->
 
 <arg name="door_engage_distance1" default = "2.0"/> 
 <arg name="subject_door_engage_distance1" default = "2.0"/>
@@ -36,8 +42,8 @@
 <arg name="base_distance1" default = "0.38"/>
 <arg name="stopper_width1" default = "75"/>
 
-<arg name="park_diff_x1" default = "0.6"/>
-<arg name="park_diff_y1" default = "0.7"/>
+<arg name="park_diff_x1" default = "0.75"/>
+<arg name="park_diff_y1" default = "0.75"/>
 
 <arg name="door_x" default = "0.05"/>  
 <arg name="door_y" default = "2.380"/>
@@ -85,13 +91,13 @@
 	</node>-->
 
 
-<node pkg="move_base" type="move_base" respawn="true" name="move_base_r0" output="screen">
+<node pkg="move_base" type="move_base" name="move_base_r0" output="screen">
 	
     <rosparam file="$(find rosnav)/costmap_common_params_study.yaml" command="load" ns="global_costmap" />
     <rosparam file="$(find rosnav)/costmap_common_params_study.yaml" command="load" ns="local_costmap" />
     <rosparam file="$(find rosnav)/local_costmap_params_study.yaml" command="load" />
     <rosparam file="$(find rosnav)/global_costmap_params_study.yaml" command="load" />
-    <rosparam file="$(find rosnav)/base_local_planner_params.yaml" command="load" />
+    <rosparam file="$(find rosnav)/base_local_planner_params_study.yaml" command="load" />
 	<param name="controller_frequency" value="10"/>
 	<param name="clearing_rotation_allowed" value="true"/>
 	<param name="recovery_behavior_enabled" value="true"/>
@@ -102,6 +108,7 @@
 	<remap from="/move_base/goal" to="/r0/move_base/goal" />
 	<remap from="/move_base_simple/goal" to="/r0/move_base_simple/goal" />
 	<remap from="/odom" to="/pose" />
+	<!--<remap from="/odom" to="/roy_robot_pose" />-->
 
 <!--<remap from="/map" to="/r0/map" />
 <remap from="/map_metadata" to="/r0/map_metadata" />-->
@@ -122,6 +129,7 @@
   <node pkg="autonomy_leds_tools" type="leds_animation_engine_node" 
     name="leds_animation_engine_node" output="screen">
     <param name="update_rate" value="25" />
+	<param name="num_leds" value="43" />
   </node>
 
 

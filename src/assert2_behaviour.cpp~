@@ -300,7 +300,7 @@ float Assert2Behaviour::getDesiredAngle(float targetX, float targetY, float curr
 	/*So this calculates, if our robot was at the origin and our target is at the appropriate relative position, what angle should we be turned to face them?*/
 	float angbc = atan2((nTargetY), (nTargetX));
 	result = angbc;
-	result = (result - 1.57595);
+	//result = (result - 1.57595);
 	/*A quick fix in the event that this desired angle adjustment takes us "off the edge" of pi*/
 	if (result < -3.1415)
 	{
@@ -500,7 +500,16 @@ void Assert2Behaviour::fightingBehaviour()
 	float yawDiff;
 	if (returnTrip == false)
 	{
-		yawDiff = tf::getYaw(currentOrientation) - goalDoorYaw;
+		if (clearedA == true && clearedB == false)
+		{
+			
+			yawDiff = tf::getYaw(currentOrientation) - desiredYaw;
+		}
+		else
+		{
+			yawDiff = tf::getYaw(currentOrientation) - goalDoorYaw;
+		}
+		
 		if (yawDiff > 3.14159)
 		{
 			yawDiff += -6.2831;
@@ -512,7 +521,15 @@ void Assert2Behaviour::fightingBehaviour()
 	}
 	else
 	{
-		yawDiff = tf::getYaw(currentOrientation) - startDoorYaw;
+		if (clearedA == true && clearedB == false)
+		{
+			
+			yawDiff = tf::getYaw(currentOrientation) - desiredYaw;
+		}
+		else
+		{
+			yawDiff = tf::getYaw(currentOrientation) - startDoorYaw;
+		}
 		if (yawDiff > 3.14159)
 		{
 			yawDiff += -6.2831;
@@ -527,28 +544,27 @@ void Assert2Behaviour::fightingBehaviour()
 
 	/*If the subject is now far enough away from the door that, by the previous term used to start the fight, they must now be moving away from the conflict*/	
 	//if (sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) > (subjectDoorEngageDistance + 0.1) && clearedA == false)
-	if (sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) > (sqrt(((doorX - currentX)*(doorX - currentX)) + ((doorY - currentY)*(doorY - currentY))) + 0.15)  && clearedA == false)
+	if ( clearedA == false && clearedB == false
+		&&
+		(((fabs(currentX - parkX) < 0.4 && fabs(currentY - parkY) < 0.4) ) && (fabs(yawDiff) < 0.3))
+		)
 	{
 		std_msgs::Header tmpHead;
 		geometry_msgs::Pose tmpPose;
 		geometry_msgs::Point tmpPoint;
 		geometry_msgs::Quaternion tmpQuaternion;
-		
-
+		tmpPoint.x = currentX;
+		tmpPoint.y = currentY;
+		tmpPoint.z = 0.0;		
 		if (returnTrip == false)
 		{
-			tmpPoint.x = goalDoorX;
-			tmpPoint.y = goalDoorY;
-			tmpPoint.z = 0.0;
-			tmpQuaternion = goalDoorYaw;
+			desiredYaw = getDesiredAngle(goalDoorX, goalDoorY, currentX, currentY);
 		}
 		else
 		{
-			tmpPoint.x = startDoorX;
-			tmpPoint.y = startDoorY;
-			tmpPoint.z = 0.0;
-			tmpQuaternion = startDoorYaw;
+			desiredYaw = getDesiredAngle(startDoorX, startDoorY, currentX, currentY);
 		}
+		tmpQuaternion = tf::createQuaternionMsgFromYaw(desiredYaw);
 		tmpPose.position = tmpPoint;
 		tmpPose.orientation = tmpQuaternion;
 		goal_cmd.pose =	tmpPose;
@@ -556,7 +572,7 @@ void Assert2Behaviour::fightingBehaviour()
 		goal_cmd.header = tmpHead;
 
 		goal_pub.publish(goal_cmd);
-		ROS_INFO("[ASSERTIVE_BEHAVIOUR] Returning");
+		ROS_INFO("[ASSERTIVE_BEHAVIOUR] Turning");
 		audio_cmd.data = backToNormalSound;
 		audio_pub.publish(audio_cmd);
 		setLights(backToNormalLights);
@@ -564,18 +580,60 @@ void Assert2Behaviour::fightingBehaviour()
 		clearedA = true;
 		
 	}
-	if (clearedA == true && ( (((fabs(currentX - goalDoorX) < 0.4 && fabs(currentY - goalDoorY) < 0.4) ) && (fabs(yawDiff) < 0.3)) || (((fabs(currentX - startDoorX) < 0.4 && fabs(currentY - startDoorY) < 0.4) ) && (fabs(yawDiff) < 0.3))))
+	else if (clearedA == true && clearedB == false
+		&&
+		/*now turned toward door point*/	
+		(fabs(yawDiff) < 0.3)
+		&&
+		sqrt(((doorX - subjectCurrentX)*(doorX - subjectCurrentX)) + ((doorY - subjectCurrentY)*(doorY - subjectCurrentY))) > (sqrt(((doorX - currentX)*(doorX - currentX)) + ((doorY - currentY)*(doorY - currentY))) + 0.15)
+		)
 	{
 		std_msgs::Header tmpHead;
 		geometry_msgs::Pose tmpPose;
 		geometry_msgs::Point tmpPoint;
 		geometry_msgs::Quaternion tmpQuaternion;
-		//tmpPoint.x = doorX;
-		//tmpPoint.y = doorY;
+		if (returnTrip == false)
+		{
+			tmpPoint.x = goalDoorX;
+			tmpPoint.y = goalDoorY;
+			tmpPoint.z = 0.0;
+			tmpQuaternion = tf::createQuaternionMsgFromYaw(goalDoorYaw);
+		}
+		else
+		{
+			tmpPoint.x = startDoorX;
+			tmpPoint.y = startDoorY;
+			tmpPoint.z = 0.0;
+			
+			tmpQuaternion = tf::createQuaternionMsgFromYaw(startDoorYaw);
+		}
+		
+		tmpPose.position = tmpPoint;
+		tmpPose.orientation = tmpQuaternion;
+		goal_cmd.pose =	tmpPose;
+		tmpHead.frame_id = mapFrame;
+		goal_cmd.header = tmpHead;
+
+		goal_pub.publish(goal_cmd);
+
+		clearedB = true;
+		
+		
+	}
+	else if(clearedA == true && clearedB == true
+		&&
+		( (((fabs(currentX - goalDoorX) < 0.4 && fabs(currentY - goalDoorY) < 0.4) ) && (fabs(yawDiff) < 0.3)) || (((fabs(currentX - startDoorX) < 0.4 && fabs(currentY - startDoorY) < 0.4) ) && (fabs(yawDiff) < 0.3)))
+		)
+	{
+		std_msgs::Header tmpHead;
+		geometry_msgs::Pose tmpPose;
+		geometry_msgs::Point tmpPoint;
+		geometry_msgs::Quaternion tmpQuaternion;
 		tmpPoint.x = currentGoalX;
 		tmpPoint.y = currentGoalY;
 		tmpPoint.z = 0.0;
 		tmpQuaternion = currentGoalOrientation;
+		
 		tmpPose.position = tmpPoint;
 		tmpPose.orientation = tmpQuaternion;
 		goal_cmd.pose =	tmpPose;
@@ -585,7 +643,8 @@ void Assert2Behaviour::fightingBehaviour()
 		goal_pub.publish(goal_cmd);
 
 		clearedA = false;
-		ROS_INFO("[ASSERTIVE_BEHAVIOUR] resuming!");
+		clearedB = false;
+		ROS_INFO("[ASSERTIVE_BEHAVIOUR] Returning");
 		navigating = true;
 		fighting = false;
 	}

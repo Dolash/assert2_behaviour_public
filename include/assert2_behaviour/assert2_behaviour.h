@@ -108,6 +108,8 @@ private:
 	float subjectDoorEngageDistance;
 	float winnerMultiple;
 
+	float desiredYaw;
+
 		bool clockReceived;
 		bool oneRun;
 
